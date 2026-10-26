@@ -1,0 +1,1156 @@
+openapi: 3.0.3
+info:
+  title: Bilhete+ API
+  version: 0.1.0
+  description: |
+    Gerado automaticamente a partir das rotas (`npm run openapi`). Valores monetários em **centavos inteiros** (string ou número).
+    Autenticação: `Authorization: Bearer <token>` obtido em `POST /auth/login`. As rotas indicam as funções permitidas.
+    Os pedidos de pagamento aceitam `idempotencyKey`: repetir o mesmo pedido nunca debita duas vezes.
+servers: [{ url: / }]
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer }
+paths:
+  /audit:
+    get:
+      tags: [audit]
+      operationId: get_audit
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: post_auth_login
+      description: "Público."
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /events:
+    post:
+      tags: [events]
+      operationId: post_events
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+    get:
+      tags: [events]
+      operationId: get_events
+      description: "Qualquer utilizador autenticado."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/alerts:
+    get:
+      tags: [events]
+      operationId: get_events_id_alerts
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/assets/{kind}:
+    put:
+      tags: [events]
+      operationId: put_events_id_assets_kind
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: kind, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+    delete:
+      tags: [events]
+      operationId: delete_events_id_assets_kind
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: kind, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/cashier-sessions/close:
+    post:
+      tags: [events]
+      operationId: post_events_id_cashier_sessions_close
+      description: "Funções: CASHIER."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/cashier-sessions/current:
+    get:
+      tags: [events]
+      operationId: get_events_id_cashier_sessions_current
+      description: "Funções: CASHIER."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/cashier-sessions/open:
+    post:
+      tags: [events]
+      operationId: post_events_id_cashier_sessions_open
+      description: "Funções: CASHIER."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/counter/balance:
+    post:
+      tags: [events]
+      operationId: post_events_id_counter_balance
+      description: "Funções: CASHIER."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/counter/block:
+    post:
+      tags: [events]
+      operationId: post_events_id_counter_block
+      description: "Funções: CASHIER, ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/counter/credentials:
+    post:
+      tags: [events]
+      operationId: post_events_id_counter_credentials
+      description: "Funções: CASHIER."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/counter/sales:
+    post:
+      tags: [events]
+      operationId: post_events_id_counter_sales
+      description: "Funções: CASHIER."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/counter/topup-cash:
+    post:
+      tags: [events]
+      operationId: post_events_id_counter_topup_cash
+      description: "Funções: CASHIER."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/details:
+    put:
+      tags: [events]
+      operationId: put_events_id_details
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/export/{what}:
+    get:
+      tags: [events]
+      operationId: get_events_id_export_what
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: what, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/gate-manifest:
+    get:
+      tags: [events]
+      operationId: get_events_id_gate_manifest
+      description: "Funções: GATE_OPERATOR."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/gate-stats:
+    get:
+      tags: [events]
+      operationId: get_events_id_gate_stats
+      description: "Funções: GATE_OPERATOR, ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/gates:
+    post:
+      tags: [events]
+      operationId: post_events_id_gates
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+    get:
+      tags: [events]
+      operationId: get_events_id_gates
+      description: "Funções: GATE_OPERATOR."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/images:
+    post:
+      tags: [events]
+      operationId: post_events_id_images
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+    get:
+      tags: [events]
+      operationId: get_events_id_images
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/images-order:
+    put:
+      tags: [events]
+      operationId: put_events_id_images_order
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/images/{img}:
+    patch:
+      tags: [events]
+      operationId: patch_events_id_images_img
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: img, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+    delete:
+      tags: [events]
+      operationId: delete_events_id_images_img
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: img, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/images/{img}/file:
+    get:
+      tags: [events]
+      operationId: get_events_id_images_img_file
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: img, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/merchants:
+    post:
+      tags: [events]
+      operationId: post_events_id_merchants
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/overview:
+    get:
+      tags: [events]
+      operationId: get_events_id_overview
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/parent:
+    put:
+      tags: [events]
+      operationId: put_events_id_parent
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/publish:
+    post:
+      tags: [events]
+      operationId: post_events_id_publish
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/report:
+    get:
+      tags: [events]
+      operationId: get_events_id_report
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/scan:
+    post:
+      tags: [events]
+      operationId: post_events_id_scan
+      description: "Funções: GATE_OPERATOR."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/scan-batch:
+    post:
+      tags: [events]
+      operationId: post_events_id_scan_batch
+      description: "Funções: GATE_OPERATOR."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/sessions:
+    post:
+      tags: [events]
+      operationId: post_events_id_sessions
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+    get:
+      tags: [events]
+      operationId: get_events_id_sessions
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/sessions/{sid}:
+    delete:
+      tags: [events]
+      operationId: delete_events_id_sessions_sid
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: sid, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/settings:
+    put:
+      tags: [events]
+      operationId: put_events_id_settings
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/settlements:
+    get:
+      tags: [events]
+      operationId: get_events_id_settlements
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/settlements/{mid}/payouts:
+    post:
+      tags: [events]
+      operationId: post_events_id_settlements_mid_payouts
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: mid, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/theme:
+    put:
+      tags: [events]
+      operationId: put_events_id_theme
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/ticket-types:
+    post:
+      tags: [events]
+      operationId: post_events_id_ticket_types
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+    get:
+      tags: [events]
+      operationId: get_events_id_ticket_types
+      description: "Funções: CASHIER."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /me:
+    get:
+      tags: [me]
+      operationId: get_me
+      description: "Qualquer utilizador autenticado."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /me/mfa/disable:
+    post:
+      tags: [me]
+      operationId: post_me_mfa_disable
+      description: "Qualquer utilizador autenticado."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /me/mfa/enable:
+    post:
+      tags: [me]
+      operationId: post_me_mfa_enable
+      description: "Qualquer utilizador autenticado."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /me/mfa/setup:
+    post:
+      tags: [me]
+      operationId: post_me_mfa_setup
+      description: "Qualquer utilizador autenticado."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /me/password:
+    post:
+      tags: [me]
+      operationId: post_me_password
+      description: "Qualquer utilizador autenticado."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /merchants:
+    get:
+      tags: [merchants]
+      operationId: get_merchants
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /merchants/{id}/commission:
+    put:
+      tags: [merchants]
+      operationId: put_merchants_id_commission
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /merchants/{id}/products:
+    post:
+      tags: [merchants]
+      operationId: post_merchants_id_products
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /org/assets/{kind}:
+    put:
+      tags: [org]
+      operationId: put_org_assets_kind
+      description: "Funções: ORG_ADMIN. Disponível também a empresas ainda pendentes de aprovação."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: kind, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+    delete:
+      tags: [org]
+      operationId: delete_org_assets_kind
+      description: "Funções: ORG_ADMIN. Disponível também a empresas ainda pendentes de aprovação."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: kind, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /org/brand:
+    get:
+      tags: [org]
+      operationId: get_org_brand
+      description: "Funções: ORG_ADMIN. Disponível também a empresas ainda pendentes de aprovação."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /org/documents:
+    post:
+      tags: [org]
+      operationId: post_org_documents
+      description: "Funções: ORG_ADMIN. Disponível também a empresas ainda pendentes de aprovação."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /org/documents/{id}:
+    delete:
+      tags: [org]
+      operationId: delete_org_documents_id
+      description: "Funções: ORG_ADMIN. Disponível também a empresas ainda pendentes de aprovação."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /org/profile:
+    get:
+      tags: [org]
+      operationId: get_org_profile
+      description: "Funções: ORG_ADMIN. Disponível também a empresas ainda pendentes de aprovação."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+    put:
+      tags: [org]
+      operationId: put_org_profile
+      description: "Funções: ORG_ADMIN. Disponível também a empresas ainda pendentes de aprovação."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /org/resubmit:
+    post:
+      tags: [org]
+      operationId: post_org_resubmit
+      description: "Funções: ORG_ADMIN. Disponível também a empresas ainda pendentes de aprovação."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /org/theme:
+    put:
+      tags: [org]
+      operationId: put_org_theme
+      description: "Funções: ORG_ADMIN. Disponível também a empresas ainda pendentes de aprovação."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /orgs:
+    post:
+      tags: [orgs]
+      operationId: post_orgs
+      description: "Funções: PLATFORM_ADMIN."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+    get:
+      tags: [orgs]
+      operationId: get_orgs
+      description: "Funções: PLATFORM_ADMIN."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /orgs/{id}:
+    get:
+      tags: [orgs]
+      operationId: get_orgs_id
+      description: "Funções: PLATFORM_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /orgs/{id}/documents/{doc}:
+    get:
+      tags: [orgs]
+      operationId: get_orgs_id_documents_doc
+      description: "Funções: PLATFORM_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: doc, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /orgs/{id}/status:
+    post:
+      tags: [orgs]
+      operationId: post_orgs_id_status
+      description: "Funções: PLATFORM_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /pos/pay:
+    post:
+      tags: [pos]
+      operationId: post_pos_pay
+      description: "Funções: MERCHANT_OPERATOR."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /pos/products:
+    get:
+      tags: [pos]
+      operationId: get_pos_products
+      description: "Funções: MERCHANT_OPERATOR."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /pos/refund:
+    post:
+      tags: [pos]
+      operationId: post_pos_refund
+      description: "Funções: MERCHANT_OPERATOR, ORG_ADMIN."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /pos/sales:
+    get:
+      tags: [pos]
+      operationId: get_pos_sales
+      description: "Funções: MERCHANT_OPERATOR."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /public/config:
+    get:
+      tags: [público]
+      operationId: get_public_config
+      description: "Público."
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /public/events/{sub}:
+    get:
+      tags: [público]
+      operationId: get_public_events_sub
+      description: "Público."
+      parameters:
+        - { name: sub, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /public/events/{sub}/assets/{kind}:
+    get:
+      tags: [público]
+      operationId: get_public_events_sub_assets_kind
+      description: "Público."
+      parameters:
+        - { name: sub, in: path, required: true, schema: { type: string } }
+        - { name: kind, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /public/events/{sub}/images/{img}:
+    get:
+      tags: [público]
+      operationId: get_public_events_sub_images_img
+      description: "Público."
+      parameters:
+        - { name: sub, in: path, required: true, schema: { type: string } }
+        - { name: img, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /public/events/{sub}/orders:
+    post:
+      tags: [público]
+      operationId: post_public_events_sub_orders
+      description: "Público."
+      parameters:
+        - { name: sub, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /public/orders/{id}:
+    get:
+      tags: [público]
+      operationId: get_public_orders_id
+      description: "Público."
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /public/org/{slug}:
+    get:
+      tags: [público]
+      operationId: get_public_org_slug
+      description: "Público."
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /public/org/{slug}/logo:
+    get:
+      tags: [público]
+      operationId: get_public_org_slug_logo
+      description: "Público."
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /public/register:
+    post:
+      tags: [público]
+      operationId: post_public_register
+      description: "Público."
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /public/simulate-payment:
+    post:
+      tags: [público]
+      operationId: post_public_simulate_payment
+      description: "Público."
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /public/tickets/{token}:
+    get:
+      tags: [público]
+      operationId: get_public_tickets_token
+      description: "Público."
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /public/tickets/{token}/receipts/{entry}:
+    get:
+      tags: [público]
+      operationId: get_public_tickets_token_receipts_entry
+      description: "Público."
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+        - { name: entry, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /public/tickets/{token}/refund-request:
+    post:
+      tags: [público]
+      operationId: post_public_tickets_token_refund_request
+      description: "Público."
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /public/tickets/{token}/topup:
+    post:
+      tags: [público]
+      operationId: post_public_tickets_token_topup
+      description: "Público."
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /refund-requests/{id}/decide:
+    post:
+      tags: [refund-requests]
+      operationId: post_refund_requests_id_decide
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /tickets/{id}/revoke:
+    post:
+      tags: [tickets]
+      operationId: post_tickets_id_revoke
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /users:
+    post:
+      tags: [users]
+      operationId: post_users
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+    get:
+      tags: [users]
+      operationId: get_users
+      description: "Funções: ORG_ADMIN. Disponível também a empresas ainda pendentes de aprovação."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /users/{id}:
+    patch:
+      tags: [users]
+      operationId: patch_users_id
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /users/{id}/password:
+    post:
+      tags: [users]
+      operationId: post_users_id_password
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /webhooks/{provider}:
+    post:
+      tags: [webhooks]
+      operationId: post_webhooks_provider
+      description: "Público."
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }

@@ -1,0 +1,28 @@
+[Unit]
+Description=Bilhete+ (API + interface web)
+After=network.target postgresql.service
+# Travão ao crash-loop: 3 falhas em 60 s => 'failed' visível em vez de reiniciar para sempre
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=bilheteplus
+Group=bilheteplus
+WorkingDirectory=/var/www/bilheteplus
+# Arranque puro (sem git pull/build): um crash recupera sempre a MESMA versão.
+# Para publicar código novo: bash /var/www/bilheteplus/deploy/deploy.sh
+ExecStart=/bin/bash /var/www/bilheteplus/deploy/run-bilheteplus.sh
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bilheteplus
+# Endurecimento básico
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
