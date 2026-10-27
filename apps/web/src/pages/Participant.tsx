@@ -97,7 +97,7 @@ export function AccountPage() {
 
   return (
     <div className="pp">
-      <header className="pp-top"><a href="/" aria-label="Início"><img src="/logo-dark.svg" alt="Bilhete+" /></a><span className="pp-top-r"><LangSwitch className="on-dark" /><a href="/events">Ver eventos</a></span></header>
+      <header className="pp-top"><a href="/" aria-label="Início"><img src="/logo-dark.svg" alt="Bilhete+" /></a><span className="pp-top-r"><LangSwitch className="on-dark" /><a href="/events">Ver eventos</a>{me && <button type="button" className="pp-out" onClick={logout}><Icon n="logout" />Sair</button>}</span></header>
       <section className="pp-hero">
         <span className="pp-label">[BP/ A minha conta]</span>
         <h1>{me ? me.name : 'A minha conta'}</h1>
@@ -109,7 +109,6 @@ export function AccountPage() {
           <div className="pp-tabs" role="tablist">
             <button role="tab" aria-selected={tab === 'tickets'} className={tab === 'tickets' ? 'on' : ''} onClick={() => setTab('tickets')}>Os meus bilhetes</button>
             <button role="tab" aria-selected={tab === 'profile'} className={tab === 'profile' ? 'on' : ''} onClick={() => setTab('profile')}>Dados e segurança</button>
-            <button className="pp-link out" onClick={logout}><Icon n="logout" />Sair</button>
           </div>
           {tab === 'tickets' && (!orders ? <Skeleton rows={3} /> : orders.length === 0 ? <div className="pp-card"><Empty icon="ticket">Ainda não comprou bilhetes. <a href="/events">Ver eventos</a></Empty></div> : (
             <div className="pp-orders">{orders.map((o) => (

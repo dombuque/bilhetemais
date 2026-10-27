@@ -33,3 +33,5 @@
 .pp-ticket-bot { padding: 18px; display: grid; gap: 10px; }
 .pp-alert { background: #fde3e0; color: #7a1710; border-left: 4px solid #c4271d; padding: 12px 14px; margin: 0; font-size: .92rem; }
 @media (min-width: 900px) { .pp-hero { padding: 56px 32px 60px; } .pp-main { padding-top: 32px; } .pp-auth { margin-top: 8px; } }
+.pp-out { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px; background: transparent; color: #fff; border: 1.5px solid rgb(255 255 255 / .5); font: 700 .72rem var(--mono); text-transform: uppercase; letter-spacing: .04em; cursor: pointer; border-radius: 0; box-shadow: none; clip-path: none; }
+.pp-out:hover { background: var(--cyan); color: var(--ink); border-color: var(--cyan); } .pp-out svg { width: 16px; height: 16px; }
