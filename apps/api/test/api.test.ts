@@ -14,6 +14,12 @@ const MT = (n: number) => n * 100;
 
 let db: ReturnType<typeof createDb>, server: Server, base: string, schema: string;
 
+let buyerToken: string | undefined;
+/** Comprar bilhetes online exige conta de participante: regista uma na primeira compra. */
+async function buyTicket(sub: string, body: unknown, token?: string) {
+  if (!buyerToken) buyerToken = (await call('POST', '/account/register', { name: 'Comprador Teste', email: 'comprador@teste.mz', password: 'pw-comprador-1' })).body.token;
+  return call('POST', `/public/events/${sub}/orders`, body, token ?? buyerToken);
+}
 async function call(method: string, path: string, body?: unknown, token?: string, headers: Record<string, string> = {}) {
   const raw = body === undefined ? undefined : JSON.stringify(body);
   const r = await fetch(base + path, {
@@ -96,7 +102,7 @@ describe('Bilhete+ API — critérios de aceitação', () => {
   });
 
   it('4. compra online: pendente até ao webhook assinado; webhook repetido é ignorado', async () => {
-    const o = await call('POST', '/public/events/festival-de-maputo/orders', { buyerName: 'Ana', buyerContact: '84', items: [{ ticketTypeId: S.type, qty: 1 }] });
+    const o = await buyTicket('festival-de-maputo', { buyerName: 'Ana', buyerContact: '84', items: [{ ticketTypeId: S.type, qty: 1 }] });
     expect(o.body.status).toBe('PENDING_PAYMENT');
     expect((await call('GET', `/public/orders/${o.body.orderId}`)).body.tickets[0].token).toBeNull();
     const bad = await fetch(base + '/webhooks/simulator', { method: 'POST', body: '{"id":"e1"}', headers: { 'content-type': 'application/json', 'x-signature': 'x'.repeat(64) } });
@@ -316,8 +322,8 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     // regras aplicadas
     const sub = child.body.subdomain;
     const tt = (await call('GET', `/public/events/${sub}`)).body.ticketTypes[0].id;
-    expect((await call('POST', `/public/events/${sub}/orders`, { buyerName: 'Z', items: [{ ticketTypeId: tt, qty: 2 }] })).status).toBe(400);
-    const ord = await call('POST', `/public/events/${sub}/orders`, { buyerName: 'Z', items: [{ ticketTypeId: tt, qty: 1 }] });
+    expect((await buyTicket(sub, { buyerName: 'Z', items: [{ ticketTypeId: tt, qty: 2 }] })).status).toBe(400);
+    const ord = await buyTicket(sub, { buyerName: 'Z', items: [{ ticketTypeId: tt, qty: 1 }] });
     expect(ord.status).toBe(200);
     await webhook({ id: 'evt-child-1', type: 'payment.succeeded', kind: 'ORDER', ref: ord.body.orderId });
     const tok = (await call('GET', `/public/orders/${ord.body.orderId}`)).body.tickets[0].token;
@@ -501,7 +507,7 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     const sub = (await call('GET', `/events/${S.child}/overview`, undefined, S.adminA)).body.event.subdomain;
     const buy = async (hook: string) => {
       const tt = (await call('GET', `/public/events/${sub}`)).body.ticketTypes[0].id;
-      const o = await call('POST', `/public/events/${sub}/orders`, { buyerName: 'Off', items: [{ ticketTypeId: tt, qty: 1 }] });
+      const o = await buyTicket(sub, { buyerName: 'Off', items: [{ ticketTypeId: tt, qty: 1 }] });
       await webhook({ id: hook, type: 'payment.succeeded', kind: 'ORDER', ref: o.body.orderId });
       return (await call('GET', `/public/orders/${o.body.orderId}`)).body.tickets[0].token as string;
     };
@@ -623,7 +629,63 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     expect((await call('GET', '/public/config')).body.selfRegistration).toBe(true); // instância dos testes com o interruptor ligado
   });
 
+  it('contas de participantes: comprar exige sessão; registo, entrada, os meus bilhetes, palavra-passe e apagar conta', async () => {
+    const order = { items: [{ ticketTypeId: S.type, qty: 1 }] };
+    const guest = await call('POST', '/public/events/festival-de-maputo/orders', order);
+    expect(guest.status).toBe(401);
+    expect(guest.body.error).toBe('LOGIN_REQUIRED');
+    expect((await call('POST', '/public/events/festival-de-maputo/orders', order, 'token-falso')).status).toBe(401);
+    // registo
+    expect((await call('POST', '/account/register', { name: 'Rita', email: 'sem-arroba', password: 'pw-rita-12345' })).status).toBe(400);
+    expect((await call('POST', '/account/register', { name: 'Rita', email: 'rita@teste.mz', password: 'curta' })).status).toBe(400);
+    const reg = await call('POST', '/account/register', { name: 'Rita', email: 'Rita@Teste.mz', password: 'pw-rita-12345', phone: '84 111 2222' });
+    expect(reg.status).toBe(200);
+    expect(reg.body.account).toMatchObject({ name: 'Rita', email: 'rita@teste.mz' });
+    expect((await call('POST', '/account/register', { name: 'Outra', email: 'RITA@teste.mz', password: 'pw-rita-12345' })).status).toBe(409); // e-mail já usado (sem distinguir maiúsculas)
+    // entrada
+    expect((await call('POST', '/account/login', { email: 'rita@teste.mz', password: 'errada-errada' })).status).toBe(401);
+    expect((await call('POST', '/account/login', { email: 'nao@existe.mz', password: 'pw-rita-12345' })).status).toBe(401);
+    const tok = (await call('POST', '/account/login', { email: 'RITA@teste.mz', password: 'pw-rita-12345' })).body.token;
+    expect((await call('GET', '/account/me', undefined, tok)).body.account.name).toBe('Rita');
+    expect((await call('GET', '/account/me')).status).toBe(401);
+    expect((await call('GET', '/account/me', undefined, S.adminA)).status).toBe(401); // uma sessão de equipa não é uma conta
+    // compra com a conta: o nome e o contacto vêm da conta
+    const o = await buyTicket('festival-de-maputo', order, tok);
+    expect(o.status).toBe(200);
+    const row = (await db.query<any>('SELECT buyer_name,buyer_contact,account_id FROM ticket_orders WHERE id=$1', [o.body.orderId])).rows[0];
+    expect(row).toMatchObject({ buyer_name: 'Rita', buyer_contact: 'rita@teste.mz' });
+    expect(row.account_id).toBeTruthy();
+    // os meus bilhetes: só aparecem os bilhetes depois de pagos, e só os da própria conta
+    let mine = (await call('GET', '/account/orders', undefined, tok)).body;
+    expect(mine).toHaveLength(1);
+    expect(mine[0]).toMatchObject({ id: o.body.orderId, status: 'PENDING_PAYMENT', tickets: [] });
+    await webhook({ id: 'evt-acc-' + o.body.orderId, type: 'payment.succeeded', kind: 'ORDER', ref: o.body.orderId });
+    mine = (await call('GET', '/account/orders', undefined, tok)).body;
+    expect(mine[0].status).toBe('PAID');
+    expect(mine[0].tickets[0].token).toHaveLength(22);
+    const other = (await call('POST', '/account/register', { name: 'Outro', email: 'outro@teste.mz', password: 'pw-outro-12345' })).body.token;
+    expect((await call('GET', '/account/orders', undefined, other)).body).toEqual([]);
+    // dados e palavra-passe
+    expect((await call('PATCH', '/account/me', { name: 'Rita Silva' }, tok)).body.account.name).toBe('Rita Silva');
+    expect((await call('POST', '/account/password', { current: 'errada-errada', next: 'nova-senha-123' }, tok)).status).toBe(401);
+    expect((await call('POST', '/account/password', { current: 'pw-rita-12345', next: 'curta' }, tok)).status).toBe(400);
+    const second = (await call('POST', '/account/login', { email: 'rita@teste.mz', password: 'pw-rita-12345' })).body.token;
+    expect((await call('POST', '/account/password', { current: 'pw-rita-12345', next: 'nova-senha-123' }, tok)).status).toBe(200);
+    expect((await call('GET', '/account/me', undefined, second)).status).toBe(401); // as outras sessões terminam
+    expect((await call('GET', '/account/me', undefined, tok)).status).toBe(200);
+    expect((await call('POST', '/account/login', { email: 'rita@teste.mz', password: 'pw-rita-12345' })).status).toBe(401);
+    // sair e apagar a conta (anonimiza; o bilhete continua válido)
+    await call('POST', '/account/logout', {}, second);
+    expect((await call('DELETE', '/account/me', { password: 'errada-errada' }, tok)).status).toBe(401);
+    expect((await call('DELETE', '/account/me', { password: 'nova-senha-123' }, tok)).status).toBe(200);
+    expect((await call('GET', '/account/me', undefined, tok)).status).toBe(401);
+    expect((await call('POST', '/account/login', { email: 'rita@teste.mz', password: 'nova-senha-123' })).status).toBe(401);
+    expect((await db.query<any>(`SELECT email,name FROM accounts WHERE id=$1`, [row.account_id])).rows[0].name).toBe('Conta apagada');
+    expect((await call('GET', `/public/tickets/${mine[0].tickets[0].token}`)).status).toBe(200);
+  });
+
   it('M-Pesa automático: recargas e bilhetes só pelo M-Pesa; recusa, resposta perdida, expiração e duplo clique', async () => {
+    await db.query('UPDATE ticket_types SET quantity=quantity+5 WHERE id=$1', [S.type]); // os testes anteriores já gastaram stock
     const drain = () => appInst.drain();
     const reconcile = () => appInst.reconcileMpesa();
     const bal = async () => BigInt((await call('GET', `/public/tickets/${S.onlineToken}`)).body.balanceMinor);
@@ -667,7 +729,7 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     expect(await bal()).toBe(b0 + BigInt(MT(120)));
     expect((await topup(MT(5000))).status).toBe(400); // os limites do evento aplicam-se também ao M-Pesa
     // bilhetes: só são emitidos quando o M-Pesa confirma
-    const o = await call('POST', '/public/events/festival-de-maputo/orders', { buyerName: 'M-Pesa', items: [{ ticketTypeId: S.type, qty: 1 }] });
+    const o = await buyTicket('festival-de-maputo', { buyerName: 'M-Pesa', items: [{ ticketTypeId: S.type, qty: 1 }] });
     const oid = o.body.orderId;
     expect((await call('POST', `/public/orders/${oid}/pay`, { phone: 'abc' })).status).toBe(400);
     mpesaStub.next.push({ outcome: 'FAILED', code: 'INS-5', message: 'cancelado' });

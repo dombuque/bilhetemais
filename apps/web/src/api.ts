@@ -15,6 +15,26 @@ const MESSAGES: Record<string, string> = {
   MFA_REQUIRED: 'Introduza o código de verificação.',
 };
 
+const AKEY = 'bp_account';
+export const accountToken = () => { try { return localStorage.getItem(AKEY); } catch { return null; } };
+export const setAccountToken = (t: string | null) => { try { t ? localStorage.setItem(AKEY, t) : localStorage.removeItem(AKEY); } catch { /* sem armazenamento */ } };
+
+/** Pedidos da conta de participante (sessão própria, separada da equipa). */
+export async function accountApi<T = any>(method: string, path: string, body?: unknown): Promise<T> {
+  const token = accountToken();
+  const r = await fetch(path, {
+    method,
+    headers: { ...(body !== undefined ? { 'content-type': 'application/json' } : {}), ...(token ? { authorization: 'Bearer ' + token } : {}) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    if (r.status === 401 && token && data.error === 'LOGIN_REQUIRED') setAccountToken(null); // sessão expirada
+    throw new ApiError(r.status, data.error === 'LOGIN_REQUIRED' ? 'Inicie sessão para continuar.' : MESSAGES[data.error] ?? data.error ?? 'Erro de rede', data.error);
+  }
+  return data as T;
+}
+
 export async function api<T = any>(method: string, path: string, body?: unknown): Promise<T> {
   const token = getToken();
   const r = await fetch(path, {

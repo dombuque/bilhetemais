@@ -21,9 +21,11 @@ const pos = (await j('POST', '/auth/login', { email: 'bar@bilheteplus.test', pas
 const product = (await j('GET', '/pos/products', null, pos)).data.find((p) => BigInt(p.price_minor) === 5000n) ?? (await j('GET', '/pos/products', null, pos)).data[0];
 const price = BigInt(product.price_minor);
 
+// comprar exige conta de participante: uma conta de carga serve todos os pedidos
+const buyer = (await j('POST', '/account/register', { name: 'Carga', email: `carga-${Date.now()}@teste.mz`, password: 'carga-teste-1234' })).data.token;
 // preparação: carteiras com 100 MT (bilhete online + pagamento simulado + carregamento simulado)
 const tokens = await pool(WALLETS, 5, async () => {
-  const o = (await j('POST', `/public/events/${EVENT}/orders`, { buyerName: 'Carga', items: [{ ticketTypeId: typeId, qty: 1 }] })).data;
+  const o = (await j('POST', `/public/events/${EVENT}/orders`, { buyerName: 'Carga', items: [{ ticketTypeId: typeId, qty: 1 }] }, buyer)).data;
   await j('POST', '/public/simulate-payment', { kind: 'ORDER', ref: o.orderId });
   const tk = (await j('GET', `/public/orders/${o.orderId}`)).data.tickets[0].token;
   const t = (await j('POST', `/public/tickets/${tk}/topup`, { provider: 'simulator', amountMinor: 100 * MT })).data;

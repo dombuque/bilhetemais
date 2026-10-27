@@ -365,9 +365,103 @@ export function createApp(db: Db, cfg: AppConfig) {
       gallery: (await db.query<any>('SELECT id,caption FROM event_images WHERE event_id=$1 ORDER BY position,created_at', [ev.id])).rows,
       programme: (await db.query<any>('SELECT id,title,starts_at,ends_at,stage,description FROM event_sessions WHERE event_id=$1 ORDER BY starts_at', [ev.id])).rows };
   }));
+  // ---------- contas de participantes ----------
+  const ACCOUNT_DAYS = 30;
+  const accountSession = async (accountId: string) => {
+    const token = randomBytes(32).toString('base64url');
+    await db.query(`INSERT INTO account_sessions VALUES($1,$2,now()+($3||' days')::interval)`, [hashToken(token), accountId, String(ACCOUNT_DAYS)]);
+    return token;
+  };
+  const bearer = (req: Request) => /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1] ?? null;
+  const needAccount = async (req: Request) => {
+    const t = bearer(req);
+    const r = t ? await db.query<any>(`SELECT a.id,a.name,a.email,a.phone FROM account_sessions s JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=$1 AND s.expires_at>now() AND a.status='ACTIVE'`, [hashToken(t)]) : null;
+    if (!r?.rows[0]) throw new HttpError(401, 'LOGIN_REQUIRED');
+    return r.rows[0] as { id: string; name: string; email: string; phone: string | null };
+  };
+  const validEmail = (v: unknown) => {
+    const e = String(v ?? '').trim().toLowerCase();
+    if (!/^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/.test(e) || e.length > 254) throw new HttpError(400, 'e-mail inválido');
+    return e;
+  };
+  const goodPassword = (v: unknown) => {
+    const p = String(v ?? '');
+    if (p.length < 8 || p.length > 200) throw new HttpError(400, 'a palavra-passe deve ter pelo menos 8 caracteres');
+    return p;
+  };
+  app.post('/account/register', limit(cfg.loginRateLimit), h(async (req) => {
+    const email = validEmail(req.body?.email);
+    const name = str(req.body?.name, 'name').trim().slice(0, 120);
+    const password = goodPassword(req.body?.password);
+    const phone = req.body?.phone ? String(req.body.phone).trim().slice(0, 30) : null;
+    try {
+      const r = await db.query<any>('INSERT INTO accounts(email,name,phone,password_hash) VALUES($1,$2,$3,$4) RETURNING id', [email, name, phone, hashPassword(password)]);
+      return { token: await accountSession(r.rows[0].id), account: { name, email, phone } };
+    } catch (e: any) {
+      if (e?.code === '23505') throw new HttpError(409, 'já existe uma conta com este e-mail');
+      throw e;
+    }
+  }));
+  app.post('/account/login', limit(cfg.loginRateLimit), h(async (req) => {
+    const r = await db.query<any>(`SELECT id,name,email,phone,password_hash FROM accounts WHERE lower(email)=$1 AND status='ACTIVE'`, [String(req.body?.email ?? '').trim().toLowerCase()]);
+    const a = r.rows[0];
+    if (!a || !checkPassword(String(req.body?.password ?? ''), a.password_hash)) throw new HttpError(401, 'credenciais inválidas');
+    return { token: await accountSession(a.id), account: { name: a.name, email: a.email, phone: a.phone } };
+  }));
+  app.post('/account/logout', h(async (req) => {
+    const t = bearer(req as Request);
+    if (t) await db.query('DELETE FROM account_sessions WHERE token_hash=$1', [hashToken(t)]);
+    return { ok: true };
+  }));
+  app.get('/account/me', h(async (req) => ({ account: await needAccount(req as Request) })));
+  app.patch('/account/me', h(async (req) => {
+    const a = await needAccount(req as Request);
+    const name = req.body?.name === undefined ? a.name : str(req.body.name, 'name').trim().slice(0, 120);
+    const phone = req.body?.phone === undefined ? a.phone : (req.body.phone ? String(req.body.phone).trim().slice(0, 30) : null);
+    await db.query('UPDATE accounts SET name=$2,phone=$3 WHERE id=$1', [a.id, name, phone]);
+    return { account: { name, email: a.email, phone } };
+  }));
+  app.post('/account/password', limit(cfg.loginRateLimit), h(async (req) => {
+    const a = await needAccount(req as Request);
+    const cur = (await db.query<any>('SELECT password_hash FROM accounts WHERE id=$1', [a.id])).rows[0];
+    if (!checkPassword(String(req.body?.current ?? ''), cur.password_hash)) throw new HttpError(401, 'palavra-passe actual incorrecta');
+    const next = goodPassword(req.body?.next);
+    const keep = hashToken(bearer(req as Request)!);
+    await db.transaction(async (tx) => {
+      await tx.query('UPDATE accounts SET password_hash=$2 WHERE id=$1', [a.id, hashPassword(next)]);
+      await tx.query('DELETE FROM account_sessions WHERE account_id=$1 AND token_hash<>$2', [a.id, keep]); // termina as outras sessões
+    });
+    return { ok: true };
+  }));
+  /** Apaga a conta: anonimiza os dados pessoais; os bilhetes já emitidos continuam válidos. */
+  app.delete('/account/me', h(async (req) => {
+    const a = await needAccount(req as Request);
+    const cur = (await db.query<any>('SELECT password_hash FROM accounts WHERE id=$1', [a.id])).rows[0];
+    if (!checkPassword(String(req.body?.password ?? ''), cur.password_hash)) throw new HttpError(401, 'palavra-passe incorrecta');
+    await db.transaction(async (tx) => {
+      await tx.query(`UPDATE accounts SET status='DELETED',email='apagada-'||id||'@removido.invalid',name='Conta apagada',phone=NULL,password_hash='-' WHERE id=$1`, [a.id]);
+      await tx.query('DELETE FROM account_sessions WHERE account_id=$1', [a.id]);
+    });
+    return { ok: true };
+  }));
+  /** "Os meus bilhetes": encomendas da conta, com os links dos bilhetes já emitidos. */
+  app.get('/account/orders', h(async (req) => {
+    const a = await needAccount(req as Request);
+    const os = (await db.query<any>(`SELECT o.id,o.status,o.total_minor,o.created_at,e.name AS event,e.starts_at,e.location,d.subdomain
+        FROM ticket_orders o JOIN events e ON e.id=o.event_id LEFT JOIN event_domains d ON d.event_id=e.id WHERE o.account_id=$1 ORDER BY o.created_at DESC LIMIT 100`, [a.id])).rows;
+    for (const o of os) o.tickets = (await orderTickets(db, o.id)).filter((t: any) => t.token).map((t: any) => ({ id: t.id, token: t.token, status: t.status }));
+    return os;
+  }));
+
   app.post('/public/events/:sub/orders', h(async (req) => {
+    const account = await needAccount(req as Request); // comprar exige sessão iniciada
     const ev = await publicEvent(req.params.sub);
-    const r = await db.transaction((tx) => createOrder(tx, ev, 'ONLINE', req.body, 'DIGITAL'));
+    const body = { ...req.body, buyerName: req.body?.buyerName || account.name, buyerContact: req.body?.buyerContact || account.email };
+    const r = await db.transaction(async (tx) => {
+      const c = await createOrder(tx, ev, 'ONLINE', body, 'DIGITAL');
+      await tx.query('UPDATE ticket_orders SET account_id=$2 WHERE id=$1', [c.orderId, account.id]);
+      return c;
+    });
     return { orderId: r.orderId, status: r.status, totalMinor: r.total };
   }));
   app.get('/public/orders/:id', h(async (req) => {

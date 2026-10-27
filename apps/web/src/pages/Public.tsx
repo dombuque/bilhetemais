@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
-import { api, dt, mt, toMinor } from '../api';
+import { accountApi, accountToken, api, dt, mt, toMinor } from '../api';
 import type { Config } from '../main';
 import { assetUrl, themeStyle, type Assets, type Theme } from '../theme';
 import { Empty, Field, Icon, MoneyInput, Pill, Qr, Skeleton, Stepper, TokenCode, useAction, useToast } from '../ui';
 import { Countdown, Gallery, Programme, WhereWhen } from './Extras';
 import { ReceiptModal } from './Receipt';
 import { MiniMap } from '../map/Maps';
+import { AuthPanel, useAccount } from './Participant';
 
 interface Brand { organization: string; subdomain: string; theme: Theme; assets: Assets }
 
@@ -17,6 +18,7 @@ function Frame({ brand, hero, children, bar, size = 'wide' }: { brand?: Brand; h
       <header className="pub-bar">
         <a href="/" aria-label="Início">{logo ? <img src={logo} alt={brand!.organization} /> : brand ? <span>{brand.organization}</span> : <img src="/logo.svg" alt="Bilhete+" />}</a>
         {brand && <span className="muted small">por {brand.organization}</span>}
+        <a className="small" href="/conta" style={{ marginLeft: 'auto' }}>{accountToken() ? 'A minha conta' : 'Entrar'}</a>
       </header>
       {hero}
       <main className={'pub stack ' + size + (hero ? ' overlap' : '')}>{children}</main>
@@ -43,9 +45,8 @@ export function PublicEvent({ slug, cfg }: { slug: string; cfg: Config }) {
   const [ev, setEv] = useState<any>(null);
   const [err, setErr] = useState(false);
   const [qty, setQty] = useState<Record<string, number>>({});
-  const [name, setName] = useState('');
-  const [contact, setContact] = useState('');
   const [checkout, setCheckout] = useState(false);
+  const { me, refresh, logout } = useAccount();
   const toast = useToast();
   const { busy, run } = useAction(toast.show);
   useEffect(() => { api('GET', `/public/events/${slug}`).then(setEv).catch(() => setErr(true)); }, [slug]);
@@ -58,7 +59,10 @@ export function PublicEvent({ slug, cfg }: { slug: string; cfg: Config }) {
   const count = items.reduce((s, i) => s + i.qty, 0);
   const total = ev.ticketTypes.reduce((s: bigint, t: any) => s + BigInt(t.price_minor) * BigInt(qty[t.id] ?? 0), 0n);
   const cta = ev.theme.ctaLabel || 'Comprar';
-  const buy = () => run(async () => { const o = await api('POST', `/public/events/${slug}/orders`, { buyerName: name, buyerContact: contact, items }); location.assign('/o/' + o.orderId); });
+  const buy = () => run(async () => {
+    try { const o = await accountApi('POST', `/public/events/${slug}/orders`, { items }); location.assign('/o/' + o.orderId); }
+    catch (e: any) { if (e?.code === 'LOGIN_REQUIRED') refresh(); throw e; }
+  });
   const day = new Date(ev.startsAt).toLocaleDateString('pt-MZ', { weekday: 'short', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
 
   return (
@@ -95,13 +99,15 @@ export function PublicEvent({ slug, cfg }: { slug: string; cfg: Config }) {
             </div>
           </section>
           {checkout && (
+            me === null ? <><AuthPanel onDone={refresh} /><button className="ghost wide" onClick={() => setCheckout(false)}>Voltar</button></> : me === undefined ? <Skeleton rows={2} /> : (
             <section className="card stack">
-              <h2>Os seus dados</h2>
-              <Field label="Nome"><input value={name} autoComplete="name" onChange={(e) => setName(e.target.value)} /></Field>
-              <Field label="Telemóvel ou e-mail" hint="Para o contactarmos se necessário."><input value={contact} autoComplete="tel" onChange={(e) => setContact(e.target.value)} /></Field>
-              <button className="big wide" disabled={busy || !name.trim() || count === 0} onClick={buy}>{busy ? 'A processar…' : `Pagar ${mt(total)}`}</button>
+              <h2>Confirmar compra</h2>
+              <p>A comprar como <b>{me.name}</b><br /><span className="muted small">{me.email}</span></p>
+              <p className="muted small">Os bilhetes ficam na sua conta, em «Os meus bilhetes».</p>
+              <button className="big wide" disabled={busy || count === 0} onClick={buy}>{busy ? 'A processar…' : total === 0n ? 'Obter bilhetes' : `Pagar ${mt(total)}`}</button>
               <button className="ghost wide" onClick={() => setCheckout(false)}>Voltar</button>
-            </section>
+              <button type="button" className="ghost sm" onClick={logout}>Não é {me.name.split(' ')[0]}? Sair</button>
+            </section>)
           )}
         </aside>
         <div className="pub-main stack">

@@ -7,6 +7,7 @@ import './styles.css';
 import { BackToTop } from './ui';
 import { Home } from './pages/Landing';
 // cada página carrega à parte: quem abre a página inicial (ou o bilhete) não descarrega o código da equipa
+const AccountPage = lazy(() => import('./pages/Participant').then((m) => ({ default: m.AccountPage })));
 const PublicEvent = lazy(() => import('./pages/Public').then((m) => ({ default: m.PublicEvent })));
 const Order = lazy(() => import('./pages/Public').then((m) => ({ default: m.Order })));
 const Wallet = lazy(() => import('./pages/Public').then((m) => ({ default: m.Wallet })));
@@ -36,6 +37,7 @@ function App() {
   if ((m = /^\/e\/([a-z0-9-]+)$/.exec(path))) return <PublicEvent slug={m[1]} cfg={cfg} />;
   if ((m = /^\/o\/([0-9a-f-]{36})$/.exec(path))) return <Order id={m[1]} cfg={cfg} />;
   if ((m = /^\/t\/([\w-]+)$/.exec(path))) return <Wallet token={m[1]} cfg={cfg} />;
+  if (path === '/conta') return <Suspense fallback={null}><AccountPage /></Suspense>;
   if (path === '/logo-opcoes') return <Suspense fallback={null}><LogoOptions /></Suspense>;
   if (path === '/eventos') return <Suspense fallback={null}><Discover /></Suspense>;
   if (path === '/registo') return cfg.selfRegistration ? <Register /> : <RegistrationClosed />;
