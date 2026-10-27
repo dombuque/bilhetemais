@@ -3,7 +3,7 @@ import { accountApi, accountToken, dt, mt, setAccountToken } from '../api';
 import { Empty, Icon, LangSwitch, Pill, Skeleton, useAction, useToast } from '../ui';
 import './participant.css';
 
-export interface Me { name: string; email: string; phone: string | null }
+export interface Me { name: string; email: string; phone: string | null; hasPassword?: boolean }
 
 /** Conta de participante em sessão (ou null). */
 export function useAccount() {
@@ -130,14 +130,17 @@ export function AccountPage() {
               <label className="pp-field"><span>Nome</span><input value={prof.name} autoComplete="name" onChange={(e) => setProf({ ...prof, name: e.target.value })} /></label>
               <label className="pp-field"><span>Telemóvel</span><input type="tel" value={prof.phone} autoComplete="tel" onChange={(e) => setProf({ ...prof, phone: e.target.value })} /></label>
               <button className="pp-btn" disabled={busy || !prof.name.trim()} onClick={() => run(async () => { await accountApi('PATCH', '/account/me', { name: prof.name, phone: prof.phone || null }); refresh(); }, 'Dados guardados')}>Guardar</button></section>
+            {me.hasPassword === false ? <section className="pp-card"><h2 className="pp-h sm">Como entra</h2><p className="pp-sub">Esta conta entra com o Google. Não tem palavra-passe: a segurança é a da sua conta Google.</p></section> :
             <section className="pp-card"><h2 className="pp-h sm">Palavra-passe</h2>
               <label className="pp-field"><span>Palavra-passe actual</span><input type="password" autoComplete="current-password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} /></label>
               <label className="pp-field"><span>Nova palavra-passe</span><input type="password" autoComplete="new-password" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} /><small>Pelo menos 8 caracteres. As outras sessões serão terminadas.</small></label>
-              <button className="pp-btn" disabled={busy || pw.next.length < 8 || !pw.current} onClick={() => run(async () => { await accountApi('POST', '/account/password', pw); setPw({ current: '', next: '' }); }, 'Palavra-passe alterada')}>Alterar palavra-passe</button></section>
+              <button className="pp-btn" disabled={busy || pw.next.length < 8 || !pw.current} onClick={() => run(async () => { await accountApi('POST', '/account/password', pw); setPw({ current: '', next: '' }); }, 'Palavra-passe alterada')}>Alterar palavra-passe</button></section>}
             <section className="pp-card"><h2 className="pp-h sm">Apagar conta</h2>
               <p className="pp-sub">Remove os seus dados pessoais. Os bilhetes já emitidos continuam válidos através do link de cada bilhete.</p>
-              <label className="pp-field"><span>Palavra-passe para confirmar</span><input type="password" autoComplete="current-password" value={del} onChange={(e) => setDel(e.target.value)} /></label>
-              <button className="pp-btn danger" disabled={busy || !del} onClick={() => run(async () => { await accountApi('DELETE', '/account/me', { password: del }); setAccountToken(null); location.assign('/'); })}>Apagar a minha conta</button></section>
+              {me.hasPassword === false
+                ? <label className="pp-field"><span>Escreva o seu e-mail para confirmar</span><input type="email" autoComplete="off" placeholder={me.email} value={del} onChange={(e) => setDel(e.target.value)} /></label>
+                : <label className="pp-field"><span>Palavra-passe para confirmar</span><input type="password" autoComplete="current-password" value={del} onChange={(e) => setDel(e.target.value)} /></label>}
+              <button className="pp-btn danger" disabled={busy || !del} onClick={() => run(async () => { await accountApi('DELETE', '/account/me', me.hasPassword === false ? { confirm: del } : { password: del }); setAccountToken(null); location.assign('/'); })}>Apagar a minha conta</button></section>
           </>}
         </>}
       </main>

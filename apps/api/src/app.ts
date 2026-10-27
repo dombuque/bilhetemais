@@ -385,9 +385,9 @@ export function createApp(db: Db, cfg: AppConfig) {
   const bearer = (req: Request) => /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1] ?? null;
   const needAccount = async (req: Request) => {
     const t = bearer(req);
-    const r = t ? await db.query<any>(`SELECT a.id,a.name,a.email,a.phone FROM account_sessions s JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=$1 AND s.expires_at>now() AND a.status='ACTIVE'`, [hashToken(t)]) : null;
+    const r = t ? await db.query<any>(`SELECT a.id,a.name,a.email,a.phone,(a.password_hash<>'-') AS "hasPassword" FROM account_sessions s JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=$1 AND s.expires_at>now() AND a.status='ACTIVE'`, [hashToken(t)]) : null;
     if (!r?.rows[0]) throw new HttpError(401, 'LOGIN_REQUIRED');
-    return r.rows[0] as { id: string; name: string; email: string; phone: string | null };
+    return r.rows[0] as { id: string; name: string; email: string; phone: string | null; hasPassword: boolean };
   };
   const validEmail = (v: unknown) => {
     const e = String(v ?? '').trim().toLowerCase();
@@ -483,10 +483,11 @@ export function createApp(db: Db, cfg: AppConfig) {
     const name = req.body?.name === undefined ? a.name : str(req.body.name, 'name').trim().slice(0, 120);
     const phone = req.body?.phone === undefined ? a.phone : (req.body.phone ? String(req.body.phone).trim().slice(0, 30) : null);
     await db.query('UPDATE accounts SET name=$2,phone=$3 WHERE id=$1', [a.id, name, phone]);
-    return { account: { name, email: a.email, phone } };
+    return { account: { name, email: a.email, phone, hasPassword: a.hasPassword } };
   }));
   app.post('/account/password', limit(cfg.loginRateLimit), h(async (req) => {
     const a = await needAccount(req as Request);
+    if (!a.hasPassword) throw new HttpError(409, 'esta conta entra com Google e não tem palavra-passe');
     const cur = (await db.query<any>('SELECT password_hash FROM accounts WHERE id=$1', [a.id])).rows[0];
     if (!checkPassword(String(req.body?.current ?? ''), cur.password_hash)) throw new HttpError(401, 'palavra-passe actual incorrecta');
     const next = goodPassword(req.body?.next);
@@ -501,7 +502,8 @@ export function createApp(db: Db, cfg: AppConfig) {
   app.delete('/account/me', h(async (req) => {
     const a = await needAccount(req as Request);
     const cur = (await db.query<any>('SELECT password_hash FROM accounts WHERE id=$1', [a.id])).rows[0];
-    if (!checkPassword(String(req.body?.password ?? ''), cur.password_hash)) throw new HttpError(401, 'palavra-passe incorrecta');
+    // contas só Google não têm palavra-passe: confirmam escrevendo o e-mail
+    if (a.hasPassword ? !checkPassword(String(req.body?.password ?? ''), cur.password_hash) : String(req.body?.confirm ?? '').trim().toLowerCase() !== a.email) throw new HttpError(401, a.hasPassword ? 'palavra-passe incorrecta' : 'escreva o seu e-mail para confirmar');
     await db.transaction(async (tx) => {
       await tx.query(`UPDATE accounts SET status='DELETED',email='apagada-'||id||'@removido.invalid',name='Conta apagada',phone=NULL,password_hash='-' WHERE id=$1`, [a.id]);
       await tx.query('DELETE FROM account_sessions WHERE account_id=$1', [a.id]);

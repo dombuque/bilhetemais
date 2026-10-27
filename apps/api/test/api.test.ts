@@ -741,6 +741,12 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     expect((await call('POST', '/account/login', { email: 'vitima@gmail.com', password: 'pw-intruso-123' })).status).toBe(401);
     // contas só Google não podem entrar com palavra-passe (e não rebenta)
     expect((await call('POST', '/account/login', { email: 'maria@gmail.com', password: '-' })).status).toBe(401);
+    // contas só Google: sem palavra-passe para mudar; apagar confirma-se com o e-mail
+    expect((await call('GET', '/account/me', undefined, tok1)).body.account.hasPassword).toBe(false);
+    expect((await call('POST', '/account/password', { current: 'x', next: 'nova-senha-123' }, tok1)).status).toBe(409);
+    expect((await call('DELETE', '/account/me', { confirm: 'outro@gmail.com' }, tok1)).status).toBe(401);
+    expect((await call('DELETE', '/account/me', { confirm: ' MARIA@gmail.com ' }, tok1)).status).toBe(200);
+    expect((await call('GET', '/account/me', undefined, tok1)).status).toBe(401);
   });
 
   it('M-Pesa automático: recargas e bilhetes só pelo M-Pesa; recusa, resposta perdida, expiração e duplo clique', async () => {
