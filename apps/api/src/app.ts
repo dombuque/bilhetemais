@@ -393,9 +393,9 @@ export function createApp(db: Db, cfg: AppConfig) {
   const bearer = (req: Request) => /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1] ?? null;
   const needAccount = async (req: Request) => {
     const t = bearer(req);
-    const r = t ? await db.query<any>(`SELECT a.id,a.name,a.email,a.phone,(a.password_hash<>'-') AS "hasPassword" FROM account_sessions s JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=$1 AND s.expires_at>now() AND a.status='ACTIVE'`, [hashToken(t)]) : null;
+    const r = t ? await db.query<any>(`SELECT a.id,a.name,a.email,a.phone,a.newsletter,(a.password_hash<>'-') AS "hasPassword" FROM account_sessions s JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=$1 AND s.expires_at>now() AND a.status='ACTIVE'`, [hashToken(t)]) : null;
     if (!r?.rows[0]) throw new HttpError(401, 'LOGIN_REQUIRED');
-    return r.rows[0] as { id: string; name: string; email: string; phone: string | null; hasPassword: boolean };
+    return r.rows[0] as { id: string; name: string; email: string; phone: string | null; hasPassword: boolean; newsletter: boolean };
   };
   const validEmail = (v: unknown) => {
     const e = String(v ?? '').trim().toLowerCase();
@@ -461,13 +461,47 @@ export function createApp(db: Db, cfg: AppConfig) {
     return undefined;
   }));
 
+  // ---------- newsletter (contas de participantes) ----------
+  const unsubToken = (accountId: string) => createHmac('sha256', cfg.tokenSecret).update('unsub:' + accountId).digest('base64url').slice(0, 22);
+  const unsubLink = (accountId: string) => `${cfg.publicUrl ?? 'https://bilhetemais.semfila.online'}/newsletter/unsubscribe?a=${accountId}&t=${unsubToken(accountId)}`;
+  /** Sair da newsletter com o link do e-mail (não exige sessão). */
+  app.post('/public/newsletter/unsubscribe', h(async (req) => {
+    const a = String(req.body?.a ?? ''), t = String(req.body?.t ?? '');
+    if (!/^[0-9a-f-]{36}$/.test(a) || t.length !== 22 || !timingSafeEqual(Buffer.from(unsubToken(a)), Buffer.from(t))) throw new HttpError(400, 'ligação inválida');
+    await db.query('UPDATE accounts SET newsletter=false WHERE id=$1', [a]);
+    return { ok: true };
+  }));
+  app.get('/platform/newsletter', ...staff('PLATFORM_ADMIN'), h(async () => ({
+    subscribers: (await db.query<any>(`SELECT count(*)::int AS c FROM accounts WHERE status='ACTIVE' AND newsletter`)).rows[0].c,
+    campaigns: (await db.query(`SELECT id,subject,recipients,created_at FROM newsletter_campaigns ORDER BY created_at DESC LIMIT 20`)).rows,
+  })));
+  /** Envia uma newsletter a todas as contas subscritas (ou só um teste para um e-mail). Cada mensagem leva a ligação para sair. */
+  app.post('/platform/newsletter', ...staff('PLATFORM_ADMIN'), h(async (req) => {
+    const subject = str(req.body?.subject, 'subject').trim().slice(0, 150);
+    const body = str(req.body?.body, 'body').trim().slice(0, 5000);
+    if (subject.length < 3 || body.length < 10) throw new HttpError(400, 'escreva o assunto e a mensagem');
+    const footer = (id: string) => `\n\n—\nRecebe este e-mail porque tem conta no Bilhete+.\nPara deixar de receber novidades: ${unsubLink(id)}`;
+    if (req.body?.testTo) {
+      const to = validEmail(req.body.testTo);
+      await queueMail(db, cfg.mailer ?? null, db, { to, subject: '[TESTE] ' + subject, text: body + footer('00000000-0000-0000-0000-000000000000') });
+      return { test: true, recipients: 1 };
+    }
+    const subs = (await db.query<any>(`SELECT id,email FROM accounts WHERE status='ACTIVE' AND newsletter ORDER BY created_at LIMIT 5000`)).rows;
+    await db.transaction(async (tx) => {
+      for (const s of subs) await queueMail(db, cfg.mailer ?? null, tx, { to: s.email, subject, text: body + footer(s.id) });
+      await tx.query('INSERT INTO newsletter_campaigns(subject,body,sent_by,recipients) VALUES($1,$2,$3,$4)', [subject, body, req.user!.id, subs.length]);
+      await audit(tx, req.user, 'newsletter.send', 'newsletter', undefined, { subject, recipients: subs.length });
+    });
+    return { test: false, recipients: subs.length };
+  }));
+
   app.post('/account/register', limit(cfg.loginRateLimit), h(async (req) => {
     const email = validEmail(req.body?.email);
     const name = str(req.body?.name, 'name').trim().slice(0, 120);
     const password = goodPassword(req.body?.password);
     const phone = req.body?.phone ? String(req.body.phone).trim().slice(0, 30) : null;
     try {
-      const r = await db.query<any>('INSERT INTO accounts(email,name,phone,password_hash) VALUES($1,$2,$3,$4) RETURNING id', [email, name, phone, hashPassword(password)]);
+      const r = await db.query<any>('INSERT INTO accounts(email,name,phone,password_hash,newsletter) VALUES($1,$2,$3,$4,$5) RETURNING id', [email, name, phone, hashPassword(password), req.body?.newsletter !== false]);
       return { token: await accountSession(r.rows[0].id), account: { name, email, phone } };
     } catch (e: any) {
       if (e?.code === '23505') throw new HttpError(409, 'já existe uma conta com este e-mail');
@@ -490,8 +524,9 @@ export function createApp(db: Db, cfg: AppConfig) {
     const a = await needAccount(req as Request);
     const name = req.body?.name === undefined ? a.name : str(req.body.name, 'name').trim().slice(0, 120);
     const phone = req.body?.phone === undefined ? a.phone : (req.body.phone ? String(req.body.phone).trim().slice(0, 30) : null);
-    await db.query('UPDATE accounts SET name=$2,phone=$3 WHERE id=$1', [a.id, name, phone]);
-    return { account: { name, email: a.email, phone, hasPassword: a.hasPassword } };
+    const newsletter = typeof req.body?.newsletter === 'boolean' ? req.body.newsletter : a.newsletter;
+    await db.query('UPDATE accounts SET name=$2,phone=$3,newsletter=$4 WHERE id=$1', [a.id, name, phone, newsletter]);
+    return { account: { name, email: a.email, phone, hasPassword: a.hasPassword, newsletter } };
   }));
   app.post('/account/password', limit(cfg.loginRateLimit), h(async (req) => {
     const a = await needAccount(req as Request);
@@ -540,8 +575,12 @@ export function createApp(db: Db, cfg: AppConfig) {
   }));
   app.get('/public/orders/:id', h(async (req) => {
     if (!/^[0-9a-f-]{36}$/.test(req.params.id)) throw new HttpError(404, 'encomenda não encontrada');
-    const o = await db.query<any>('SELECT id,status,total_minor FROM ticket_orders WHERE id=$1', [req.params.id]);
+    const o = await db.query<any>('SELECT id,status,total_minor,buyer_contact FROM ticket_orders WHERE id=$1', [req.params.id]);
     if (!o.rows[0]) throw new HttpError(404, 'encomenda não encontrada');
+    // e-mail para onde os bilhetes seguem sozinhos (a conta de quem comprou), mascarado: a/b/c ficam a***@dominio
+    const em = /^([^@\s])[^@\s]*(@[^@\s]+)$/.exec(o.rows[0].buyer_contact ?? '');
+    o.rows[0].emailedTo = o.rows[0].status === 'PAID' && em ? em[1] + '***' + em[2] : null;
+    delete o.rows[0].buyer_contact;
     const open = (await db.query<any>(`SELECT id FROM mpesa_charges WHERE kind='ORDER' AND ref_id=$1 AND status='PENDING'`, [req.params.id])).rows[0];
     return { ...o.rows[0], tickets: await orderTickets(db, req.params.id), chargeId: open?.id ?? null }; // chargeId: pagamento M-Pesa em curso
   }));
@@ -757,6 +796,7 @@ export function createApp(db: Db, cfg: AppConfig) {
       if (t.rows[0]) ticketId = t.rows[0].id;
       if (!t.rows[0] || t.rows[0].status === 'PENDING') result = 'UNAUTHORIZED';
       else if (t.rows[0].status === 'REVOKED') result = 'REVOKED';
+      else if (t.rows[0].status === 'BLOCKED') result = 'BLOCKED';
       else if (new Date(ev.ends_at) < new Date()) result = 'EXPIRED';
       else {
         const u = await tx.query(`UPDATE tickets SET status='USED',used_at=now() WHERE id=$1 AND status='ISSUED' RETURNING id`, [ticketId]);
@@ -764,21 +804,90 @@ export function createApp(db: Db, cfg: AppConfig) {
       }
       await tx.query('INSERT INTO entry_scans(event_id,gate_id,ticket_id,operator_id,result) VALUES($1,$2,$3,$4,$5)', [ev.id, req.body.gateId ?? null, ticketId, req.user!.id, result]);
       // dados para a pessoa da portaria confirmar quem entra (o QR só leva um código opaco)
-      let ticket: { type: string; holder: string; usedAt: string | null; firstGate: string | null } | null = null;
+      let ticket: { type: string; holder: string; usedAt: string | null; firstGate: string | null; reason: string | null } | null = null;
       if (ticketId) {
-        const d = (await tx.query<any>(`SELECT tt.name AS type, o.buyer_name AS holder, t.used_at,
+        const d = (await tx.query<any>(`SELECT tt.name AS type, o.buyer_name AS holder, t.used_at, t.status_reason,
             (SELECT g.name FROM entry_scans s JOIN access_gates g ON g.id=s.gate_id WHERE s.ticket_id=t.id AND s.result='VALID' ORDER BY s.created_at LIMIT 1) AS first_gate
           FROM tickets t JOIN ticket_types tt ON tt.id=t.ticket_type_id JOIN ticket_orders o ON o.id=t.order_id WHERE t.id=$1`, [ticketId])).rows[0];
-        if (d) ticket = { type: d.type, holder: d.holder, usedAt: d.used_at, firstGate: d.first_gate };
+        if (d) ticket = { type: d.type, holder: d.holder, usedAt: d.used_at, firstGate: d.first_gate, reason: result === 'BLOCKED' || result === 'REVOKED' ? d.status_reason : null };
       }
       return { result, ticket };
+    });
+  }));
+  // ---------- controlo de bilhetes: bloquear (reversível) e cancelar (definitivo), sempre com justificação ----------
+  const ticketReason = (v: unknown) => {
+    const r = String(v ?? '').trim();
+    if (r.length < 3) throw new HttpError(400, 'indique o motivo');
+    if (r.length > 300) throw new HttpError(400, 'motivo demasiado longo (máx. 300)');
+    return r;
+  };
+  /** Carrega o bilhete garantindo que pertence a um evento da empresa de quem pede. */
+  const ticketOf = async (user: User, id: string, tx: Tx = db) => {
+    if (!/^[0-9a-f-]{36}$/.test(id)) throw new HttpError(404, 'bilhete não encontrado');
+    const t = (await tx.query<any>('SELECT id,event_id,status,status_before,wallet_id FROM tickets WHERE id=$1 FOR UPDATE', [id])).rows[0];
+    if (!t) throw new HttpError(404, 'bilhete não encontrado');
+    await eventFor(user, t.event_id, tx);
+    return t;
+  };
+  const setTicketStatus = async (tx: Tx, user: User, t: any, status: string, before: string | null, reason: string | null) => {
+    await tx.query('UPDATE tickets SET status=$2,status_before=$3,status_reason=$4,status_changed_by=$5,status_changed_at=now() WHERE id=$1', [t.id, status, before, reason, user.id]);
+  };
+  app.get('/events/:id/tickets', ...staff('ORG_ADMIN'), h(async (req) => {
+    const ev = await eventFor(req.user!, req.params.id);
+    const q = String(req.query.q ?? '').trim().slice(0, 80);
+    const status = String(req.query.status ?? '');
+    const where = ['t.event_id=$1', `t.status<>'PENDING'`], args: unknown[] = [ev.id];
+    if (['ISSUED', 'USED', 'BLOCKED', 'REVOKED'].includes(status)) { args.push(status); where.push(`t.status=$${args.length}`); }
+    if (q) {
+      const hash = q.length === 22 ? hashToken(q) : null; // o código completo do bilhete também serve de pesquisa
+      args.push('%' + q.replace(/[%_\\]/g, '') + '%'); const like = args.length;
+      args.push(hash); const h2 = args.length;
+      where.push(`(o.buyer_name ILIKE $${like} OR o.buyer_contact ILIKE $${like} OR t.id::text ILIKE $${like} OR t.token_hash=$${h2})`);
+    }
+    return (await db.query(`SELECT t.id,t.status,t.status_reason AS reason,t.status_changed_at AS changed_at,tt.name AS type,o.buyer_name AS holder,o.buyer_contact AS contact,t.created_at,
+        (SELECT u.name FROM users u WHERE u.id=t.status_changed_by) AS changed_by
+      FROM tickets t JOIN ticket_types tt ON tt.id=t.ticket_type_id JOIN ticket_orders o ON o.id=t.order_id
+      WHERE ${where.join(' AND ')} ORDER BY t.created_at DESC LIMIT 100`, args)).rows;
+  }));
+  app.post('/tickets/:id/block', ...staff('ORG_ADMIN'), h(async (req) => {
+    const reason = ticketReason(req.body?.reason);
+    return db.transaction(async (tx) => {
+      const t = await ticketOf(req.user!, req.params.id, tx);
+      if (t.status !== 'ISSUED' && t.status !== 'USED') throw new HttpError(409, t.status === 'BLOCKED' ? 'o bilhete já está bloqueado' : 'este bilhete já não pode ser bloqueado');
+      await setTicketStatus(tx, req.user!, t, 'BLOCKED', t.status, reason);
+      if (t.wallet_id) await tx.query(`UPDATE wallets SET status='BLOCKED' WHERE id=$1 AND status='ACTIVE'`, [t.wallet_id]); // sem entrada e sem pagamentos
+      await audit(tx, req.user, 'ticket.block', 'ticket', t.id, { reason });
+      return { status: 'BLOCKED' };
+    });
+  }));
+  app.post('/tickets/:id/unblock', ...staff('ORG_ADMIN'), h(async (req) => {
+    return db.transaction(async (tx) => {
+      const t = await ticketOf(req.user!, req.params.id, tx);
+      if (t.status !== 'BLOCKED') throw new HttpError(409, 'o bilhete não está bloqueado');
+      await setTicketStatus(tx, req.user!, t, t.status_before === 'USED' ? 'USED' : 'ISSUED', null, null);
+      if (t.wallet_id) await tx.query(`UPDATE wallets SET status='ACTIVE' WHERE id=$1 AND status='BLOCKED'`, [t.wallet_id]);
+      await audit(tx, req.user, 'ticket.unblock', 'ticket', t.id);
+      return { status: t.status_before === 'USED' ? 'USED' : 'ISSUED' };
+    });
+  }));
+  /** Cancelar é definitivo: o bilhete deixa de entrar e a carteira fica bloqueada (o saldo devolve-se pelo circuito de reembolsos). */
+  app.post('/tickets/:id/cancel', ...staff('ORG_ADMIN'), h(async (req) => {
+    const reason = ticketReason(req.body?.reason);
+    return db.transaction(async (tx) => {
+      const t = await ticketOf(req.user!, req.params.id, tx);
+      if (t.status === 'REVOKED') throw new HttpError(409, 'o bilhete já está cancelado');
+      if (t.status === 'PENDING') throw new HttpError(409, 'o bilhete ainda não foi emitido');
+      await setTicketStatus(tx, req.user!, t, 'REVOKED', null, reason);
+      if (t.wallet_id) await tx.query(`UPDATE wallets SET status='BLOCKED' WHERE id=$1 AND status='ACTIVE'`, [t.wallet_id]);
+      await audit(tx, req.user, 'ticket.cancel', 'ticket', t.id, { reason });
+      return { status: 'REVOKED' };
     });
   }));
   app.post('/tickets/:id/revoke', ...staff('ORG_ADMIN'), h(async (req) => {
     const t = await db.query<any>('SELECT event_id FROM tickets WHERE id=$1', [req.params.id]);
     if (!t.rows[0]) throw new HttpError(404, 'bilhete não encontrado');
     await eventFor(req.user!, t.rows[0].event_id);
-    await db.query(`UPDATE tickets SET status='REVOKED' WHERE id=$1`, [req.params.id]);
+    await db.query(`UPDATE tickets SET status='REVOKED',status_reason=COALESCE($2,status_reason),status_changed_by=$3,status_changed_at=now() WHERE id=$1`, [req.params.id, req.body?.reason ? String(req.body.reason).slice(0, 300) : null, req.user!.id]);
     await audit(db, req.user, 'ticket.revoke', 'ticket', req.params.id);
     return { status: 'REVOKED' };
   }));
@@ -1404,7 +1513,7 @@ export function createApp(db: Db, cfg: AppConfig) {
   app.get('/events/:id/gate-manifest', ...staff('GATE_OPERATOR'), h(async (req) => {
     const ev = await eventFor(req.user!, req.params.id);
     const st = (await settingsOf(db, ev)).effective;
-    const t = await db.query<any>(`SELECT token_hash AS h,status AS s FROM tickets WHERE event_id=$1 AND status IN ('ISSUED','USED','REVOKED')`, [ev.id]);
+    const t = await db.query<any>(`SELECT token_hash AS h,status AS s FROM tickets WHERE event_id=$1 AND status IN ('ISSUED','USED','REVOKED','BLOCKED')`, [ev.id]);
     return { generatedAt: new Date().toISOString(), endsAt: ev.ends_at, reentryAllowed: st.reentryAllowed, tickets: t.rows };
   }));
   /** Sincroniza leituras feitas offline. Idempotente por clientId; conflitos (já usado noutra porta) ficam sinalizados. */

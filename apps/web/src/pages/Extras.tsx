@@ -1,7 +1,7 @@
 import { locale } from '../i18n';
 import { useEffect, useMemo, useState } from 'react';
 import { dt } from '../api';
-import { Icon, Qr } from '../ui';
+import { Icon, Modal, Qr } from '../ui';
 import { googleDirections, wazeDirections } from '../map/links';
 
 /** Contagem decrescente até ao início (ou "a decorrer"). */
@@ -101,22 +101,46 @@ export function Programme({ items, eventName, location }: { items: any[]; eventN
 }
 
 /** Localização com ligação ao mapa e botões de calendário/partilha. */
+/** Menu de partilha: WhatsApp, e-mail, redes sociais, copiar a ligação e (no telemóvel) a partilha do sistema. */
+export function ShareMenu({ title, text, onClose }: { title: string; text: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const url = location.origin + location.pathname;
+  const u = encodeURIComponent(url), msg = encodeURIComponent(`${title} — ${text}`.trim()), ttl = encodeURIComponent(title);
+  const options: { name: string; href: string; color: string; mark: string }[] = [
+    { name: 'WhatsApp', href: `https://wa.me/?text=${msg}%20${u}`, color: '#25D366', mark: 'W' },
+    { name: 'E-mail', href: `mailto:?subject=${ttl}&body=${msg}%0A${u}`, color: '#5b2eff', mark: '@' },
+    { name: 'Facebook', href: `https://www.facebook.com/sharer/sharer.php?u=${u}`, color: '#1877F2', mark: 'f' },
+    { name: 'X', href: `https://twitter.com/intent/tweet?text=${msg}&url=${u}`, color: '#0b0820', mark: 'X' },
+    { name: 'Telegram', href: `https://t.me/share/url?url=${u}&text=${msg}`, color: '#229ED9', mark: 'T' },
+    { name: 'LinkedIn', href: `https://www.linkedin.com/sharing/share-offsite/?url=${u}`, color: '#0A66C2', mark: 'in' },
+    { name: 'SMS', href: `sms:?&body=${msg}%20${u}`, color: '#34a853', mark: '✉' },
+  ];
+  const copy = async () => { try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* sem permissão */ } };
+  const native = typeof navigator !== 'undefined' && 'share' in navigator;
+  return (
+    <Modal title="Partilhar" onClose={onClose}>
+      <div className="share-grid">
+        {options.map((o) => <a key={o.name} className="share-opt" href={o.href} target="_blank" rel="noopener noreferrer" onClick={onClose}><span className="share-mark" style={{ background: o.color }} aria-hidden="true">{o.mark}</span>{o.name}</a>)}
+        <button type="button" className="share-opt" onClick={copy}><span className="share-mark" style={{ background: '#5f5c7a' }} aria-hidden="true"><Icon n="copy" /></span>{copied ? 'Ligação copiada' : 'Copiar ligação'}</button>
+        {native && <button type="button" className="share-opt" onClick={() => { navigator.share({ title, text, url }).catch(() => {}); onClose(); }}><span className="share-mark" style={{ background: '#0b0820' }} aria-hidden="true">⋯</span>Mais…</button>}
+      </div>
+      <p className="muted small mono" data-no-translate style={{ wordBreak: 'break-all' }}>{url}</p>
+    </Modal>
+  );
+}
+
 export function WhereWhen({ ev }: { ev: any }) {
-  const share = async () => {
-    const data = { title: ev.name, text: ev.tagline ?? ev.name, url: location.href };
-    try { if (navigator.share) await navigator.share(data); else { await navigator.clipboard.writeText(location.href); alert_('Ligação copiada'); } } catch { /* cancelado */ }
-  };
-  const [msg, setMsg] = useState('');
+  const [sharing, setSharing] = useState(false);
   const hasGeo = typeof ev.lat === 'number' && typeof ev.lng === 'number';
-  const alert_ = (m: string) => { setMsg(m); setTimeout(() => setMsg(''), 2000); };
   return (
     <section className="card stack-sm">
       <p className="inline"><Icon n="calendar" /><span><b>{dt(ev.startsAt)}</b><br /><span className="muted small">até {dt(ev.endsAt)}</span></span></p>
       {ev.location && <p className="inline"><Icon n="pin" /><span><b>{ev.location}</b>{hasGeo ? <> · <a href={googleDirections(ev.lat, ev.lng)} target="_blank" rel="noopener noreferrer">Google Maps</a> · <a href={wazeDirections(ev.lat, ev.lng)} target="_blank" rel="noopener noreferrer">Waze</a></> : ev.mapUrl && <> · <a href={ev.mapUrl} target="_blank" rel="noopener noreferrer">Ver no mapa</a></>}</span></p>}
       <div className="inline">
         <button className="ghost sm" onClick={() => addToCalendar([{ title: ev.name, start: ev.startsAt, end: ev.endsAt, location: ev.location, description: ev.description }], 'evento.ics')}>📅 Calendário</button>
-        <button className="ghost sm" onClick={share}><Icon n="copy" />{msg || 'Partilhar'}</button>
+        <button className="ghost sm" onClick={() => setSharing(true)}><Icon n="copy" />Partilhar</button>
       </div>
+      {sharing && <ShareMenu title={ev.name} text={ev.tagline ?? ''} onClose={() => setSharing(false)} />}
     </section>
   );
 }

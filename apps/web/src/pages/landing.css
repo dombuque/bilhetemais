@@ -64,7 +64,7 @@
 .lp-mark b { flex: none; width: 8.2vw; aspect-ratio: 1; border-radius: 50%; border: .8vw solid var(--lp-cyan); color: var(--lp-cyan); display: grid; place-items: center; font: 900 5.6vw/1 var(--display); margin-bottom: 1.2vw; }
 
 .lp-marquee { background: var(--lp-ink); color: #fff; overflow: hidden; border-block: 1px solid rgb(255 255 255 / .12); }
-.lp-marquee .track { display: flex; width: max-content; animation: lpmarq 38s linear infinite; } .lp-marquee span { font: 800 1.1rem var(--display); font-stretch: 80%; text-transform: uppercase; padding: 14px 22px; display: inline-flex; align-items: center; gap: 22px; } .lp-marquee span::after { content: '✦'; color: var(--lp-coral); }
+.lp-marquee .lp-track { display: flex; width: max-content; animation: lpmarq 38s linear infinite; } .lp-marquee span { font: 800 1.1rem var(--display); font-stretch: 80%; text-transform: uppercase; padding: 14px 22px; display: inline-flex; align-items: center; gap: 22px; } .lp-marquee span::after { content: '✦'; color: var(--lp-coral); }
 @keyframes lpmarq { to { transform: translateX(-50%); } }
 
 /* ---------- SECÇÕES ---------- */
@@ -144,4 +144,8 @@
   .lp-cta h2 { font-size: clamp(2.6rem, 1rem + 7vw, 8rem); } .lp-cta .in { justify-items: start; } .lp-cta::after { right: -8%; top: -30%; width: min(46vw, 620px); }
   .lp-foot .giant { font-size: min(15vw, 22rem); }
 }
-@media (prefers-reduced-motion: reduce) { .lp-ticket, .lp-pill, .lp-marquee .track { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .lp-ticket, .lp-pill, .lp-marquee .lp-track { animation: none !important; } }
+.lp-nav .go .ghost.acct { display: inline-flex; align-items: center; gap: 8px; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .lp-nav .go .ghost.acct svg { width: 16px; height: 16px; flex: none; }
+/* faixa de títulos a correr: altura própria, para o texto não ficar cortado */
+.lp-marquee { min-height: 56px; display: flex; align-items: center; } .lp-marquee .lp-track { align-items: center; } .lp-marquee span { line-height: 1.25; flex: none; white-space: nowrap; }
+@media (min-width: 960px) { .lp-marquee { min-height: 72px; } }

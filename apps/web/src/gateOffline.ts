@@ -1,6 +1,6 @@
 // Validação de entradas sem rede: o dispositivo guarda só os HASHES dos bilhetes (não consegue forjar códigos),
 // valida localmente, regista as leituras numa fila e sincroniza quando a rede voltar.
-export interface Manifest { generatedAt: string; endsAt: string; reentryAllowed: boolean; tickets: { h: string; s: 'ISSUED' | 'USED' | 'REVOKED' }[] }
+export interface Manifest { generatedAt: string; endsAt: string; reentryAllowed: boolean; tickets: { h: string; s: 'ISSUED' | 'USED' | 'REVOKED' | 'BLOCKED' }[] }
 export interface QueuedScan { clientId: string; token: string; at: string; gateId?: string; localResult: string }
 
 export const sha256Hex = async (s: string) =>
@@ -20,6 +20,7 @@ export async function validateLocal(m: Manifest, token: string, now = new Date()
   const t = m.tickets.find((x) => x.h === h);
   if (!t) return { result: 'UNAUTHORIZED', manifest: m };
   if (t.s === 'REVOKED') return { result: 'REVOKED', manifest: m };
+  if (t.s === 'BLOCKED') return { result: 'BLOCKED', manifest: m };
   if (new Date(m.endsAt) < now) return { result: 'EXPIRED', manifest: m };
   if (t.s === 'USED') return { result: m.reentryAllowed ? 'VALID' : 'ALREADY_USED', manifest: m };
   return { result: 'VALID', manifest: { ...m, tickets: m.tickets.map((x) => (x.h === h ? { ...x, s: 'USED' as const } : x)) } };

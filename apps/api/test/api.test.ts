@@ -668,6 +668,9 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     const auto = (await db.query<any>(`SELECT subject,body FROM notifications WHERE to_email='rita@teste.mz' AND subject LIKE 'Os seus bilhetes%'`)).rows;
     expect(auto).toHaveLength(1);
     expect(auto[0].body).toMatch(/\/t\/[\w-]{22}/);
+    const shown = (await call('GET', `/public/orders/${o.body.orderId}`)).body;
+    expect(shown.emailedTo).toBe('r***@teste.mz'); // a página só mostra o e-mail mascarado
+    expect(shown.buyer_contact).toBeUndefined();
     expect(mine[0].status).toBe('PAID');
     expect(mine[0].tickets[0].token).toHaveLength(22);
     const other = (await call('POST', '/account/register', { name: 'Outro', email: 'outro@teste.mz', password: 'pw-outro-12345' })).body.token;
@@ -751,6 +754,96 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     expect((await call('DELETE', '/account/me', { confirm: 'outro@gmail.com' }, tok1)).status).toBe(401);
     expect((await call('DELETE', '/account/me', { confirm: ' MARIA@gmail.com ' }, tok1)).status).toBe(200);
     expect((await call('GET', '/account/me', undefined, tok1)).status).toBe(401);
+  });
+
+  it('controlo de bilhetes: pesquisar, bloquear e desbloquear (reversível), cancelar (definitivo), sempre com motivo e só na própria empresa', async () => {
+    await db.query('UPDATE ticket_types SET quantity=quantity+5 WHERE id=$1', [S.type]);
+    const mk = async (name: string) => {
+      const o = (await buyTicket('festival-de-maputo', { buyerName: name, buyerContact: name.toLowerCase() + '@teste.mz', items: [{ ticketTypeId: S.type, qty: 1 }] })).body.orderId;
+      await webhook({ id: 'evt-tc-' + o, type: 'payment.succeeded', kind: 'ORDER', ref: o });
+      return (await call('GET', `/public/orders/${o}`)).body.tickets[0] as { id: string; token: string };
+    };
+    const scan = (token: string) => call('POST', `/events/${S.event}/scan`, { token, gateId: S.gateId }, S.gate);
+    const t1 = await mk('Controlada');
+    // pesquisa: por nome, por código completo e por estado
+    const byName = (await call('GET', `/events/${S.event}/tickets?q=controlada`, undefined, S.adminA)).body;
+    expect(byName.map((x: any) => x.id)).toContain(t1.id);
+    expect((await call('GET', `/events/${S.event}/tickets?q=${t1.token}`, undefined, S.adminA)).body.map((x: any) => x.id)).toEqual([t1.id]);
+    expect((await call('GET', `/events/${S.event}/tickets?status=BLOCKED`, undefined, S.adminA)).body.map((x: any) => x.id)).not.toContain(t1.id);
+    expect((await call('GET', `/events/${S.event}/tickets`, undefined, S.gate)).status).toBe(403); // a porta não gere bilhetes
+    // bloquear exige motivo, respeita a empresa e impede a entrada
+    expect((await call('POST', `/tickets/${t1.id}/block`, {}, S.adminA)).status).toBe(400);
+    expect((await call('POST', `/tickets/${t1.id}/block`, { reason: 'ab' }, S.adminA)).status).toBe(400);
+    expect((await call('POST', `/tickets/${t1.id}/block`, { reason: 'Pagamento contestado' }, S.adminB)).status).toBe(404);
+    expect((await call('POST', `/tickets/${t1.id}/block`, { reason: 'Pagamento contestado' }, S.adminA)).status).toBe(200);
+    expect((await call('POST', `/tickets/${t1.id}/block`, { reason: 'outra vez' }, S.adminA)).status).toBe(409);
+    const blocked = (await scan(t1.token)).body;
+    expect(blocked.result).toBe('BLOCKED');
+    expect(blocked.ticket.reason).toBe('Pagamento contestado');
+    expect((await db.query<any>(`SELECT w.status FROM tickets t JOIN wallets w ON w.id=t.wallet_id WHERE t.id=$1`, [t1.id])).rows[0].status).toBe('BLOCKED'); // sem pagamentos
+    const row = (await call('GET', `/events/${S.event}/tickets?status=BLOCKED`, undefined, S.adminA)).body.find((x: any) => x.id === t1.id);
+    expect(row).toMatchObject({ status: 'BLOCKED', reason: 'Pagamento contestado', holder: 'Controlada' });
+    expect((await call('GET', `/events/${S.event}/gate-manifest`, undefined, S.gate)).body.tickets.find((x: any) => x.s === 'BLOCKED')).toBeTruthy(); // a porta offline também o sabe
+    // desbloquear repõe o estado anterior
+    expect((await call('POST', `/tickets/${t1.id}/unblock`, {}, S.adminB)).status).toBe(404);
+    expect((await call('POST', `/tickets/${t1.id}/unblock`, {}, S.adminA)).body.status).toBe('ISSUED');
+    expect((await call('POST', `/tickets/${t1.id}/unblock`, {}, S.adminA)).status).toBe(409);
+    expect((await scan(t1.token)).body.result).toBe('VALID');
+    // um bilhete já usado, bloqueado e desbloqueado, volta a "usado"
+    expect((await call('POST', `/tickets/${t1.id}/block`, { reason: 'Verificação' }, S.adminA)).status).toBe(200);
+    expect((await call('POST', `/tickets/${t1.id}/unblock`, {}, S.adminA)).body.status).toBe('USED');
+    expect((await scan(t1.token)).body.result).toBe('ALREADY_USED');
+    // cancelar: definitivo, com motivo
+    expect((await call('POST', `/tickets/${t1.id}/cancel`, {}, S.adminA)).status).toBe(400);
+    expect((await call('POST', `/tickets/${t1.id}/cancel`, { reason: 'Fraude confirmada' }, S.adminB)).status).toBe(404);
+    expect((await call('POST', `/tickets/${t1.id}/cancel`, { reason: 'Fraude confirmada' }, S.adminA)).body.status).toBe('REVOKED');
+    expect((await call('POST', `/tickets/${t1.id}/cancel`, { reason: 'de novo' }, S.adminA)).status).toBe(409);
+    expect((await call('POST', `/tickets/${t1.id}/unblock`, {}, S.adminA)).status).toBe(409);
+    const gone = (await scan(t1.token)).body;
+    expect(gone.result).toBe('REVOKED');
+    expect(gone.ticket.reason).toBe('Fraude confirmada');
+    // tudo fica registado
+    const acts = (await db.query<any>(`SELECT action FROM audit_logs WHERE entity_id=$1 ORDER BY id`, [t1.id])).rows.map((r: any) => r.action);
+    expect(acts).toEqual(expect.arrayContaining(['ticket.block', 'ticket.unblock', 'ticket.cancel']));
+    // um cancelado pode ser visto pela conta de quem comprou como cancelado
+    expect((await call('GET', `/public/tickets/${t1.token}`)).body.ticketStatus).toBe('REVOKED');
+  });
+
+  it('newsletter: subscrito por omissão, desligável no perfil e por ligação do e-mail; só a plataforma envia', async () => {
+    const root = await login('root@bilhete.test');
+    const mkAcc = async (email: string, extra: object = {}) => (await call('POST', '/account/register', { name: 'Leitor ' + email.split('@')[0], email, password: 'pw-leitor-1234', ...extra })).body.token as string;
+    const subA = await mkAcc('nl-a@teste.mz');
+    const subB = await mkAcc('nl-b@teste.mz', { newsletter: false }); // quem desmarca no registo não fica subscrito
+    expect((await call('GET', '/account/me', undefined, subA)).body.account.newsletter).toBe(true);
+    expect((await call('GET', '/account/me', undefined, subB)).body.account.newsletter).toBe(false);
+    // o perfil liga e desliga
+    expect((await call('PATCH', '/account/me', { newsletter: false }, subA)).body.account.newsletter).toBe(false);
+    expect((await call('PATCH', '/account/me', { newsletter: true }, subA)).body.account.newsletter).toBe(true);
+    // só a administração da plataforma envia
+    expect((await call('POST', '/platform/newsletter', { subject: 'Olá', body: 'Mensagem de teste' }, S.adminA)).status).toBe(403);
+    expect((await call('POST', '/platform/newsletter', { subject: 'x', body: 'curta' }, root)).status).toBe(400);
+    const before = (await call('GET', '/platform/newsletter', undefined, root)).body.subscribers as number;
+    expect(before).toBe((await db.query<any>(`SELECT count(*)::int AS c FROM accounts WHERE status='ACTIVE' AND newsletter`)).rows[0].c);
+    // envio de teste: só para um e-mail
+    const t = await call('POST', '/platform/newsletter', { subject: 'Novidades de Novembro', body: 'Há novos eventos no Bilhete+!', testTo: 'eu@teste.mz' }, root);
+    expect(t.body).toMatchObject({ test: true, recipients: 1 });
+    // envio real: chega a quem está subscrito, não a quem saiu, e cada mensagem traz a sua ligação para sair
+    const sent = await call('POST', '/platform/newsletter', { subject: 'Novidades de Novembro', body: 'Há novos eventos no Bilhete+!' }, root);
+    expect(sent.body.recipients).toBe(before);
+    const mails = (await db.query<any>(`SELECT to_email,body FROM notifications WHERE subject='Novidades de Novembro'`)).rows;
+    expect(mails).toHaveLength(before);
+    expect(mails.map((m: any) => m.to_email)).toContain('nl-a@teste.mz');
+    expect(mails.map((m: any) => m.to_email)).not.toContain('nl-b@teste.mz');
+    const link = /newsletter\/unsubscribe\?a=([0-9a-f-]{36})&t=([\w-]{22})/.exec(mails.find((m: any) => m.to_email === 'nl-a@teste.mz').body)!;
+    // sair pela ligação do e-mail (sem sessão); uma ligação adulterada não funciona
+    expect((await call('POST', '/public/newsletter/unsubscribe', { a: link[1], t: 'X'.repeat(22) })).status).toBe(400);
+    expect((await call('POST', '/public/newsletter/unsubscribe', { a: link[1], t: 'curto' })).status).toBe(400);
+    expect((await call('POST', '/public/newsletter/unsubscribe', { a: link[1], t: link[2] })).status).toBe(200);
+    expect((await call('GET', '/account/me', undefined, subA)).body.account.newsletter).toBe(false);
+    expect((await call('GET', '/platform/newsletter', undefined, root)).body.subscribers).toBe(before - 1);
+    const again = await call('POST', '/platform/newsletter', { subject: 'Segunda edição', body: 'Mais uma novidade para si.' }, root);
+    expect(again.body.recipients).toBe(before - 1);
+    expect((await call('GET', '/platform/newsletter', undefined, root)).body.campaigns).toHaveLength(2);
   });
 
   it('M-Pesa automático: recargas e bilhetes só pelo M-Pesa; recusa, resposta perdida, expiração e duplo clique', async () => {

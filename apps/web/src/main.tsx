@@ -8,6 +8,7 @@ import { BackToTop } from './ui';
 import { installTranslator } from './i18n';
 import { Home } from './pages/Landing';
 // cada página carrega à parte: quem abre a página inicial (ou o bilhete) não descarrega o código da equipa
+const Unsubscribe = lazy(() => import('./pages/Newsletter').then((m) => ({ default: m.Unsubscribe })));
 const AccountPage = lazy(() => import('./pages/Participant').then((m) => ({ default: m.AccountPage })));
 const PublicEvent = lazy(() => import('./pages/Public').then((m) => ({ default: m.PublicEvent })));
 const Order = lazy(() => import('./pages/Public').then((m) => ({ default: m.Order })));
@@ -41,6 +42,7 @@ function App() {
   if ((m = /^\/e\/([a-z0-9-]+)$/.exec(path))) return <PublicEvent slug={m[1]} cfg={cfg} />;
   if ((m = /^\/o\/([0-9a-f-]{36})$/.exec(path))) return <Order id={m[1]} cfg={cfg} />;
   if ((m = /^\/t\/([\w-]+)$/.exec(path))) return <Wallet token={m[1]} cfg={cfg} />;
+  if (path === '/newsletter/unsubscribe') return <Suspense fallback={null}><Unsubscribe /></Suspense>;
   if (path === '/account') return <Suspense fallback={null}><AccountPage /></Suspense>;
   if (path === '/logo-options') return <Suspense fallback={null}><LogoOptions /></Suspense>;
   if (path === '/events') return <Suspense fallback={null}><Discover /></Suspense>;

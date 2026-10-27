@@ -1,4 +1,5 @@
 import { locale } from '../i18n';
+import { useAccountName } from '../accountName';
 import { useEffect, useRef, useState } from 'react';
 import './landing.css';
 import { api, mt } from '../api';
@@ -27,6 +28,7 @@ export function Home({ canRegister }: { canRegister: boolean }) {
   const [events, setEvents] = useState<Ev[] | null>(null);
   const row = useRef<HTMLDivElement>(null);
   const [solid, setSolid] = useState(false);
+  const acctName = useAccountName();
   useEffect(() => { const on = () => setSolid(window.scrollY > 24); on(); window.addEventListener('scroll', on, { passive: true }); return () => window.removeEventListener('scroll', on); }, []);
   useEffect(() => { api('GET', '/public/events?limit=8').then((r) => setEvents(r.items)).catch(() => setEvents([])); }, []);
   const go = (e: React.FormEvent) => { e.preventDefault(); location.assign('/events' + (q.trim() ? `?q=${encodeURIComponent(q.trim())}` : '')); };
@@ -38,7 +40,7 @@ export function Home({ canRegister }: { canRegister: boolean }) {
       <header className={'lp-nav' + (solid ? ' solid' : '')}>
         <a href="/" aria-label="Bilhete+"><img src={solid ? "/logo-dark.svg" : "/logo-white.svg"} alt="Bilhete+" /></a>
         <nav aria-label="Secções"><a href="/events">Eventos</a><a href="#o-que-fazemos">O que fazemos</a><a href="#inclusao">Sem smartphone</a><a href="#como-funciona">Como funciona</a></nav>
-        <div className="go"><LangSwitch className="on-dark" /><a className="lp-btn ghost sm" href="/staff">Entrar</a>{canRegister ? <a className="lp-btn sm" href="/register">Registar empresa</a> : <a className="lp-btn sm" href="/events">Explorar</a>}</div>
+        <div className="go"><LangSwitch className="on-dark" /><a className="lp-btn ghost sm acct" href="/account">{acctName ? <><Icon n="users" />{acctName}</> : 'Entrar'}</a>{canRegister ? <a className="lp-btn sm" href="/register">Registar empresa</a> : <a className="lp-btn sm" href="/events">Explorar</a>}</div>
       </header>
       {/* ===== HERO ===== */}
       <section className="lp-hero">
@@ -71,7 +73,7 @@ export function Home({ canRegister }: { canRegister: boolean }) {
         <h1 className="lp-mark" aria-label="Bilhete+"><span>Bilhete</span><b>+</b></h1>
       </section>
 
-      <div className="lp-marquee" aria-hidden="true"><div className="track">{[...TICKER, ...TICKER, ...TICKER, ...TICKER].map((t, i) => <span key={i}>{t}</span>)}</div></div>
+      <div className="lp-marquee" aria-hidden="true"><div className="lp-track">{[...TICKER, ...TICKER, ...TICKER, ...TICKER].map((t, i) => <span key={i}>{t}</span>)}</div></div>
 
       {/* ===== QUEM SOMOS ===== */}
       <section className="lp-sec">

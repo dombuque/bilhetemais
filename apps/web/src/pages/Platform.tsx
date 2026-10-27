@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, dt, getToken, mt } from '../api';
+import { NewsletterAdmin } from './Newsletter';
 import { Empty, Field, Icon, Layout, Modal, PageHead, Pill, Skeleton, useAction, useToast } from '../ui';
 
 const FILTERS = [['PENDING', 'Pendentes'], ['ACTIVE', 'Activas'], ['all', 'Todas']] as const;
@@ -19,8 +20,8 @@ export function Platform({ me }: { me: any }) {
   useEffect(() => { if (orgs && filter === 'PENDING' && pending === 0) setFilter('all'); }, [orgs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <Layout me={me} nav={[{ id: 'orgs', label: 'Empresas', icon: 'building' }, { id: 'events', label: 'Eventos', icon: 'ticket' }]} view={view} onView={setView}>
-      {view === 'events' ? <AllEvents /> : <>
+    <Layout me={me} nav={[{ id: 'orgs', label: 'Empresas', icon: 'building' }, { id: 'events', label: 'Eventos', icon: 'ticket' }, { id: 'newsletter', label: 'Newsletter', icon: 'mail' }]} view={view} onView={setView}>
+      {view === 'events' ? <AllEvents /> : view === 'newsletter' ? <NewsletterAdmin toast={toast.show} /> : <>
       <PageHead title="Empresas" sub={`${orgs?.length ?? 0} empresa${orgs?.length === 1 ? '' : 's'}${pending ? ` · ${pending} a aguardar aprovação` : ''}`} actions={<button onClick={() => setCreating(true)}><Icon n="plus" />Nova empresa</button>} />
       <div className="seg" role="tablist" style={{ marginBottom: 16 }}>{FILTERS.map(([k, l]) => <button key={k} role="tab" aria-selected={filter === k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>{l}{k === 'PENDING' && pending > 0 ? ` (${pending})` : ''}</button>)}</div>
       <div className="card">

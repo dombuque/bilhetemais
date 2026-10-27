@@ -10,6 +10,7 @@ import { SettlementsTab } from './Settlements';
 import { ContentTab } from './Content';
 import { SettingsTab } from './Settings';
 import { PosterQr } from './Extras';
+import { TicketControl } from './TicketControl';
 
 type Toast = (m: string, e?: boolean) => void;
 
@@ -132,7 +133,7 @@ function EventAdmin({ id, back, toast, onOpen }: { id: string; back: () => void;
       <div className="seg scroll" role="tablist" style={{ marginBottom: 18 }}>{TABS.map((t) => <button key={t} role="tab" aria-selected={t === tab} className={t === tab ? 'on' : ''} onClick={() => setTab(t)}>{t}</button>)}</div>
 
       {tab === 'Resumo' && <Summary ov={ov} rep={rep} url={url} alerts={alerts} />}
-      {tab === 'Bilhetes' && <Tickets ov={ov} id={id} act={act} busy={busy} />}
+      {tab === 'Bilhetes' && <div className="stack"><Tickets ov={ov} id={id} act={act} busy={busy} /><TicketControl id={id} toast={toast} /></div>}
       {tab === 'Comerciantes' && <Merchants ov={ov} id={id} act={act} busy={busy} />}
       {tab === 'Portas' && <div className="card stack">
         {ov.gates.length === 0 ? <Empty icon="door">Sem portas. Crie pelo menos uma para o controlo de acessos.</Empty> : <ul style={{ margin: 0, paddingLeft: 20 }}>{ov.gates.map((g: any) => <li key={g.id}>{g.name}</li>)}</ul>}

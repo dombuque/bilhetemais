@@ -3,7 +3,7 @@ import { accountApi, accountToken, dt, mt, setAccountToken } from '../api';
 import { Empty, Icon, LangSwitch, Pill, Skeleton, useAction, useToast } from '../ui';
 import './participant.css';
 
-export interface Me { name: string; email: string; phone: string | null; hasPassword?: boolean }
+export interface Me { name: string; email: string; phone: string | null; hasPassword?: boolean; newsletter?: boolean }
 
 /** Conta de participante em sessão (ou null). */
 export function useAccount() {
@@ -34,6 +34,7 @@ const GoogleG = () => (
 export function AuthPanel({ onDone, intro, next }: { onDone: () => void; intro?: string; next?: string }) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [f, setF] = useState({ name: '', email: '', phone: '', password: '' });
+  const [news, setNews] = useState(true); // subscrito por omissão; a pessoa pode desmarcar
   const [show, setShow] = useState(false);
   const google = useGoogle();
   const toast = useToast();
@@ -42,7 +43,7 @@ export function AuthPanel({ onDone, intro, next }: { onDone: () => void; intro?:
   const submit = () => run(async () => {
     const r = mode === 'login'
       ? await accountApi('POST', '/account/login', { email: f.email, password: f.password })
-      : await accountApi('POST', '/account/register', { name: f.name, email: f.email, phone: f.phone || undefined, password: f.password });
+      : await accountApi('POST', '/account/register', { name: f.name, email: f.email, phone: f.phone || undefined, password: f.password, newsletter: news });
     setAccountToken(r.token);
     onDone();
   });
@@ -65,6 +66,7 @@ export function AuthPanel({ onDone, intro, next }: { onDone: () => void; intro?:
           <button type="button" className="pp-link" onClick={() => setShow(!show)}>{show ? 'Ocultar' : 'Mostrar'}</button></span>
         {mode === 'register' && <small>Pelo menos 8 caracteres.</small>}
       </label>
+      {mode === 'register' && <label className="pp-check"><input type="checkbox" checked={news} onChange={(e) => setNews(e.target.checked)} /><span>Quero receber novidades e eventos por e-mail. Posso deixar de receber quando quiser.</span></label>}
       <button className="pp-btn" disabled={busy || !ready} onClick={submit}>{busy ? 'A entrar…' : mode === 'login' ? 'Entrar' : 'Criar conta e continuar'}</button>
       <button type="button" className="pp-link center" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>{mode === 'login' ? 'Ainda não tem conta? Criar conta' : 'Já tem conta? Entrar'}</button>
       {toast.node}
@@ -126,6 +128,9 @@ export function AccountPage() {
                 </div>
               </article>))}</div>))}
           {tab === 'profile' && <>
+            <section className="pp-card"><h2 className="pp-h sm">Newsletter</h2>
+              <label className="pp-check"><input type="checkbox" checked={me.newsletter !== false} disabled={busy} onChange={(e) => run(async () => { await accountApi('PATCH', '/account/me', { newsletter: e.target.checked }); refresh(); }, e.target.checked ? 'Newsletter ativada' : 'Newsletter desativada')} /><span>Receber novidades e eventos por e-mail.</span></label>
+              <p className="pp-sub">Os e-mails das suas compras (bilhetes e pagamentos) continuam a chegar sempre.</p></section>
             <section className="pp-card"><h2 className="pp-h sm">Os meus dados</h2>
               <label className="pp-field"><span>Nome</span><input value={prof.name} autoComplete="name" onChange={(e) => setProf({ ...prof, name: e.target.value })} /></label>
               <label className="pp-field"><span>Telemóvel</span><input type="tel" value={prof.phone} autoComplete="tel" onChange={(e) => setProf({ ...prof, phone: e.target.value })} /></label>

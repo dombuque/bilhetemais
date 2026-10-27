@@ -73,7 +73,7 @@ export const Skeleton = ({ rows = 3 }: { rows?: number }) => <div className="sta
 const TONE: Record<string, [string, string]> = {
   ACTIVE: ['ok', 'Activa'], PUBLISHED: ['ok', 'Publicado'], PAID: ['ok', 'Pago'], ISSUED: ['ok', 'Válido'], APPROVED: ['ok', 'Aprovado'], CONFIRMED: ['ok', 'Confirmado'],
   PENDING: ['warn', 'Pendente'], PENDING_PAYMENT: ['warn', 'A aguardar pagamento'], DRAFT: ['warn', 'Rascunho'], USED: ['warn', 'Utilizado'],
-  SUSPENDED: ['bad', 'Suspensa'], DISABLED: ['bad', 'Desactivada'], REVOKED: ['bad', 'Revogado'], REJECTED: ['bad', 'Rejeitado'], CLOSED: ['bad', 'Encerrado'], CANCELLED: ['bad', 'Cancelado'],
+  SUSPENDED: ['bad', 'Suspensa'], DISABLED: ['bad', 'Desactivada'], REVOKED: ['bad', 'Cancelado'], BLOCKED: ['warn', 'Bloqueado'], REJECTED: ['bad', 'Rejeitado'], CLOSED: ['bad', 'Encerrado'], CANCELLED: ['bad', 'Cancelado'],
 };
 export const Pill = ({ s }: { s: string }) => <span className={'pill ' + (TONE[s]?.[0] ?? '')}>{TONE[s]?.[1] ?? s}</span>;
 

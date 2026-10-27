@@ -1,6 +1,6 @@
 import { locale } from '../i18n';
 import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
-import { accountApi, accountToken, api, dt, mt, toMinor } from '../api';
+import { accountApi, api, dt, mt, toMinor } from '../api';
 import type { Config } from '../main';
 import { assetUrl, themeStyle, type Assets, type Theme } from '../theme';
 import { Empty, Field, Icon, MoneyInput, Pill, Qr, LangSwitch, Skeleton, Stepper, TokenCode, useAction, useToast } from '../ui';
@@ -8,18 +8,20 @@ import { Countdown, Gallery, Programme, WhereWhen } from './Extras';
 import { ReceiptModal } from './Receipt';
 import { MiniMap } from '../map/Maps';
 import { AuthPanel, useAccount } from './Participant';
+import { useAccountName } from '../accountName';
 
 interface Brand { organization: string; subdomain: string; theme: Theme; assets: Assets }
 
 /** Moldura pública: aplica o tema do evento (cores, tipo de letra) a tudo o que está lá dentro. */
 function Frame({ brand, hero, children, bar, size = 'wide' }: { brand?: Brand; hero?: ReactNode; children: ReactNode; bar?: ReactNode; size?: 'wide' | 'narrow' }) {
   const logo = brand ? assetUrl(brand.subdomain, 'logo', brand.assets.logo) : null;
+  const acctName = useAccountName();
   return (
     <div className="themed" style={{ ...(brand ? themeStyle(brand.theme) : {}), minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)' } as CSSProperties}>
       <header className="pub-bar">
         <a href="/" aria-label="Início">{logo ? <img src={logo} alt={brand!.organization} /> : brand ? <span>{brand.organization}</span> : <img src="/logo.svg" alt="Bilhete+" />}</a>
         {brand && <span className="muted small">por {brand.organization}</span>}
-        <LangSwitch /><a className="small" href="/account">{accountToken() ? 'A minha conta' : 'Entrar'}</a>
+        <LangSwitch /><a className="small acct-link" href="/account">{acctName ? <><Icon n="users" />{acctName}</> : 'Entrar'}</a>
       </header>
       {hero}
       <main className={'pub stack ' + size + (hero ? ' overlap' : '')}>{children}</main>
@@ -176,27 +178,6 @@ function MpesaPay({ label, start, onDone, resume }: { label: string; start: (pho
   );
 }
 
-/** Depois de pago, permite receber os links dos bilhetes por e-mail. */
-function EmailTickets({ id }: { id: string }) {
-  const [email, setEmail] = useState('');
-  const [done, setDone] = useState<string | null>(null);
-  const toast = useToast();
-  const { busy, run } = useAction(toast.show);
-  return (
-    <section className="card stack">
-      <h2>Receber por e-mail</h2>
-      {done ? <p role="status">{done}</p> : <>
-        <Field label="O seu e-mail"><input type="email" inputMode="email" autoComplete="email" placeholder="nome@exemplo.com" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-        <button disabled={busy || !email.includes('@')} onClick={() => run(async () => {
-          const r = await api('POST', `/public/orders/${id}/email`, { email });
-          setDone(r.delivered ? `Enviámos os bilhetes para ${email}.` : 'O envio de e-mail ainda não está ativo. Guarde o link desta página ou o QR acima.');
-        })}>Enviar bilhetes por e-mail</button>
-      </>}
-      {toast.node}
-    </section>
-  );
-}
-
 export function Order({ id, cfg }: { id: string; cfg: Config }) {
   const [o, setO] = useState<any>(null);
   const toast = useToast();
@@ -218,7 +199,7 @@ export function Order({ id, cfg }: { id: string; cfg: Config }) {
           {cfg.mpesa && <MpesaPay resume={o.chargeId} label={`Pagar ${mt(o.total_minor)} com M-Pesa`} start={(phone) => api('POST', `/public/orders/${id}/pay`, { phone })} onDone={load} />}
         </>}
       </div>
-      {paid && <EmailTickets id={id} />}
+      {paid && o.emailedTo && <p className="scan-note" role="status"><Icon n="check" /> Enviámos os bilhetes para {o.emailedTo}.</p>}
       {paid && o.tickets.filter((t: any) => t.token).map((t: any, i: number) => (
         <section key={t.id} className="stub">
           <div className="top"><span className="eyebrow">Bilhete {i + 1}</span><h3 style={{ marginTop: 6 }}>Apresente à entrada</h3></div>
@@ -328,62 +309,4 @@ export function RegistrationClosed() {
 }
 
 /** Registo self-service em três passos (aprovação pela plataforma antes de criar eventos). */
-export function Register() {
-  const [f, setF] = useState({ legalName: '', tradeName: '', nuit: '', address: '', phone: '', contactName: '', email: '', password: '', acceptTerms: false });
-  const [step, setStep] = useState(0);
-  const [show, setShow] = useState(false);
-  const [done, setDone] = useState(false);
-  const toast = useToast();
-  const { busy, run } = useAction(toast.show);
-  const set = (k: keyof typeof f) => (e: any) => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
-  const ok0 = !!f.legalName.trim() && !!f.tradeName.trim() && /^\d{9}$/.test(f.nuit);
-  const ok1 = !!f.contactName.trim() && /\S+@\S+\.\S+/.test(f.email) && f.password.length >= 8;
-  const ready = ok0 && ok1 && f.acceptTerms;
-
-  if (done) return (
-    <Frame size="narrow"><div className="card stack center" style={{ padding: 36 }}>
-      <span className="pill ok" style={{ justifySelf: 'center', margin: '0 auto' }}>Registo recebido</span>
-      <h1>Falta pouco.</h1>
-      <p className="muted">A sua empresa está <b>a aguardar aprovação</b>. Entretanto pode entrar, completar o perfil, anexar documentos e escolher a marca. Só depois da aprovação poderá criar eventos.</p>
-      <a className="btn big wide" href="/staff">Entrar</a></div></Frame>
-  );
-  return (
-    <Frame size="narrow">
-      <div className="card stack" style={{ padding: 'clamp(20px, 4vw, 36px)' }}>
-        <div><span className="eyebrow">Nova empresa</span><h1 style={{ marginTop: 8 }}>Registar a minha empresa</h1><p className="muted" style={{ marginTop: 6 }}>A equipa Bilhete+ valida os dados antes de activar a criação de eventos.</p></div>
-        <ol className="steps" aria-label="Passos">{STEPS.map((s, i) => <li key={s} className={i === step ? 'on' : i < step ? 'done' : ''} aria-current={i === step ? 'step' : undefined}><span>{i < step ? <Icon n="check" /> : i + 1}</span>{s}</li>)}</ol>
-
-        {step === 0 && <div className="stack">
-          <div className="field-row">
-            <Field label="Denominação legal"><input value={f.legalName} onChange={set('legalName')} autoComplete="organization" autoFocus /></Field>
-            <Field label="Nome comercial"><input value={f.tradeName} onChange={set('tradeName')} /></Field>
-          </div>
-          <div className="field-row">
-            <Field label="NUIT" hint="9 dígitos."><input inputMode="numeric" maxLength={9} value={f.nuit} onChange={set('nuit')} /></Field>
-            <Field label="Telefone" hint="Opcional."><input type="tel" value={f.phone} onChange={set('phone')} autoComplete="tel" /></Field>
-          </div>
-          <Field label="Endereço" hint="Opcional."><input value={f.address} onChange={set('address')} autoComplete="street-address" /></Field>
-          <button className="big wide" disabled={!ok0} onClick={() => setStep(1)}>Continuar<Icon n="arrowright" /></button>
-        </div>}
-
-        {step === 1 && <div className="stack">
-          <Field label="Nome do responsável"><input value={f.contactName} onChange={set('contactName')} autoComplete="name" autoFocus /></Field>
-          <Field label="E-mail" hint="Será o seu utilizador de acesso."><input type="email" value={f.email} onChange={set('email')} autoComplete="email" /></Field>
-          <Field label="Palavra-passe" hint="Pelo menos 8 caracteres."><div className="pw"><input type={show ? 'text' : 'password'} value={f.password} onChange={set('password')} autoComplete="new-password" /><button type="button" onClick={() => setShow(!show)} aria-label={show ? 'Esconder palavra-passe' : 'Mostrar palavra-passe'}>{show ? 'Esconder' : 'Mostrar'}</button></div></Field>
-          <div className="inline"><button className="ghost big" onClick={() => setStep(0)}>Voltar</button><button className="big" style={{ flex: 1 }} disabled={!ok1} onClick={() => setStep(2)}>Continuar<Icon n="arrowright" /></button></div>
-        </div>}
-
-        {step === 2 && <div className="stack">
-          <div className="card flat"><table><tbody>
-            {([['Empresa', f.tradeName], ['Denominação', f.legalName], ['NUIT', f.nuit], ['Responsável', f.contactName], ['E-mail', f.email]] as const).map(([k, v]) => <tr key={k}><th style={{ width: '38%' }}>{k}</th><td>{v}</td></tr>)}
-          </tbody></table></div>
-          <label className="inline" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}><input type="checkbox" checked={f.acceptTerms} onChange={set('acceptTerms')} /><span className="small">Declaro que os dados são verdadeiros e aceito os termos de utilização da plataforma.</span></label>
-          <div className="inline"><button className="ghost big" onClick={() => setStep(1)}>Voltar</button>
-            <button className="big" style={{ flex: 1 }} disabled={busy || !ready} onClick={() => run(async () => { await api('POST', '/public/register', f); setDone(true); })}>{busy ? 'A enviar…' : 'Registar empresa'}</button></div>
-        </div>}
-        <p className="muted small center">Já tem conta? <a href="/staff">Entrar</a></p>
-      </div>
-      {toast.node}
-    </Frame>
-  );
-}
+export { Register } from './RegisterCompany';

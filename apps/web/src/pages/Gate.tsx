@@ -3,8 +3,8 @@ import { api, dt } from '../api';
 import { loadManifest, loadQueue, newClientId, saveManifest, saveQueue, validateLocal, type QueuedScan } from '../gateOffline';
 import { Empty, FullResult, Icon, Layout, PageHead, ScanInput, Skeleton, useToast } from '../ui';
 
-const TEXT: Record<string, string> = { VALID: 'ENTRADA VÁLIDA', ALREADY_USED: 'JÁ UTILIZADO', EXPIRED: 'EXPIRADO', REVOKED: 'REVOGADO', UNAUTHORIZED: 'NÃO AUTORIZADO', ERROR: 'ERRO DE LEITURA' };
-const SHORT: Record<string, string> = { VALID: 'Válido', ALREADY_USED: 'Já utilizado', EXPIRED: 'Expirado', REVOKED: 'Revogado', UNAUTHORIZED: 'Não autorizado', ERROR: 'Erro' };
+const TEXT: Record<string, string> = { VALID: 'ENTRADA VÁLIDA', ALREADY_USED: 'JÁ UTILIZADO', EXPIRED: 'EXPIRADO', REVOKED: 'BILHETE CANCELADO', BLOCKED: 'BILHETE BLOQUEADO', UNAUTHORIZED: 'NÃO AUTORIZADO', ERROR: 'ERRO DE LEITURA' };
+const SHORT: Record<string, string> = { VALID: 'Válido', ALREADY_USED: 'Já utilizado', EXPIRED: 'Expirado', REVOKED: 'Cancelado', BLOCKED: 'Bloqueado', UNAUTHORIZED: 'Não autorizado', ERROR: 'Erro' };
 
 export function Gate({ me }: { me: any }) {
   const [events, setEvents] = useState<any[] | null>(null);
@@ -12,7 +12,7 @@ export function Gate({ me }: { me: any }) {
   const [gates, setGates] = useState<any[]>([]);
   const [gate, setGate] = useState('');
   const [stats, setStats] = useState<any>(null);
-  const [result, setResult] = useState<{ kind: string; offline: boolean; ticket?: { type: string; holder: string; usedAt: string | null; firstGate: string | null } | null } | null>(null);
+  const [result, setResult] = useState<{ kind: string; offline: boolean; ticket?: { type: string; holder: string; usedAt: string | null; firstGate: string | null; reason?: string | null } | null } | null>(null);
   const [online, setOnline] = useState(navigator.onLine);
   const [queue, setQueue] = useState<QueuedScan[]>([]);
   const [manifestInfo, setManifestInfo] = useState<{ count: number; at: string } | null>(null);
@@ -107,7 +107,7 @@ export function Gate({ me }: { me: any }) {
         {stats && <div className="card"><h3>Últimas leituras</h3>{stats.recent.length === 0 ? <p className="muted">Ainda sem leituras.</p> :
           <table><tbody>{stats.recent.map((r: any, i: number) => <tr key={i}><td>{dt(r.created_at)}</td><td className="right"><span className={'pill ' + (r.result === 'VALID' ? 'ok' : r.result === 'ALREADY_USED' || r.result === 'EXPIRED' ? 'warn' : 'bad')}>{SHORT[r.result] ?? r.result}</span></td></tr>)}</tbody></table>}</div>}
       </div>}
-      {result && <FullResult kind={result.kind} title={TEXT[result.kind] ?? result.kind} detail={result.offline ? 'Validado sem rede · será sincronizado' : result.ticket ? <><b>{result.ticket.holder}</b><br />{result.ticket.type}{result.kind === 'ALREADY_USED' && result.ticket.usedAt ? <><br />Já entrou às {new Date(result.ticket.usedAt).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}{result.ticket.firstGate ? ` · ${result.ticket.firstGate}` : ''}</> : null}</> : undefined}
+      {result && <FullResult kind={result.kind} title={TEXT[result.kind] ?? result.kind} detail={result.offline ? 'Validado sem rede · será sincronizado' : result.ticket ? <><b>{result.ticket.holder}</b><br />{result.ticket.type}{result.kind === 'ALREADY_USED' && result.ticket.usedAt ? <><br />Já entrou às {new Date(result.ticket.usedAt).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}{result.ticket.firstGate ? ` · ${result.ticket.firstGate}` : ''}</> : null}{result.ticket.reason ? <><br />Motivo: {result.ticket.reason}</> : null}</> : undefined}
         onClose={() => { showing.current = false; setResult(null); }} autoCloseMs={result.kind === 'VALID' ? 2600 : undefined} />}
       {toast.node}
     </Layout>
