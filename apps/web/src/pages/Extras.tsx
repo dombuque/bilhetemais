@@ -1,3 +1,4 @@
+import { locale } from '../i18n';
 import { useEffect, useMemo, useState } from 'react';
 import { dt } from '../api';
 import { Icon, Qr } from '../ui';
@@ -77,11 +78,11 @@ export function addToCalendar(items: { title: string; start: string; end?: strin
 export function Programme({ items, eventName, location }: { items: any[]; eventName: string; location: string | null }) {
   const days = useMemo(() => {
     const m = new Map<string, any[]>();
-    for (const s of items) { const k = new Date(s.starts_at).toLocaleDateString('pt-MZ', { weekday: 'long', day: 'numeric', month: 'long' }); m.set(k, [...(m.get(k) ?? []), s]); }
+    for (const s of items) { const k = new Date(s.starts_at).toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }); m.set(k, [...(m.get(k) ?? []), s]); }
     return [...m.entries()];
   }, [items]);
   if (!items.length) return null;
-  const time = (d: string) => new Date(d).toLocaleTimeString('pt-MZ', { hour: '2-digit', minute: '2-digit' });
+  const time = (d: string) => new Date(d).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
   return (
     <section className="card stack">
       <div className="between"><h2>Programa</h2>

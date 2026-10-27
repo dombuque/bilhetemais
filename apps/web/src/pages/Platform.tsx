@@ -29,7 +29,7 @@ export function Platform({ me }: { me: any }) {
             <tbody>{list.map((o) => (
               <tr key={o.id} className="click" onClick={() => setSel(o.id)}>
                 <td data-l="Empresa"><b>{o.trade_name}</b><br /><small className="muted">{o.legal_name}</small></td><td data-l="NUIT">{o.nuit}</td>
-                <td data-l="Responsável">{o.contact_name}<br /><small className="muted">{o.phone}</small></td><td data-l="Backoffice" onClick={(e) => e.stopPropagation()}><a href={`/empresa/${o.slug}`} target="_blank" rel="noopener noreferrer" className="mono small">/empresa/{o.slug}</a><br /><button type="button" className="ghost sm" onClick={() => navigator.clipboard?.writeText(`${location.origin}/empresa/${o.slug}`)}><Icon n="copy" />Copiar link</button></td><td data-l="Documentos">{o.documents}</td>
+                <td data-l="Responsável">{o.contact_name}<br /><small className="muted">{o.phone}</small></td><td data-l="Backoffice" onClick={(e) => e.stopPropagation()}><a href={`/company/${o.slug}`} target="_blank" rel="noopener noreferrer" className="mono small">/company/{o.slug}</a><br /><button type="button" className="ghost sm" onClick={() => navigator.clipboard?.writeText(`${location.origin}/company/${o.slug}`)}><Icon n="copy" />Copiar link</button></td><td data-l="Documentos">{o.documents}</td>
                 <td data-l="Registo">{dt(o.created_at)}</td><td data-l="Estado"><Pill s={o.status} /></td></tr>))}</tbody></table>)}
       </div>
       {creating && <NewOrg toast={toast.show} onClose={() => { setCreating(false); load(); }} />}
@@ -124,7 +124,7 @@ function Review({ id, onClose, toast }: { id: string; onClose: () => void; toast
           {o.users.map((u: any) => <div className="between small" key={u.id}><span>{u.name} · <span className="muted">{u.email}</span></span><span className="muted">{u.role}</span></div>)}</div>
         <div><h3>Eventos ({o.events.length})</h3>
           {o.events.length === 0 ? <p className="muted small">Ainda sem eventos.</p> : o.events.map((e: any) => <div className="between small" key={e.id}><span>{e.name}</span><span className="muted">{e.sold} bilhetes · <Pill s={e.status} /></span></div>)}</div>
-        <p className="muted small">Área de entrada da equipa: <span className="mono">/empresa/{o.slug}</span></p>
+        <p className="muted small">Área de entrada da equipa: <span className="mono">/company/{o.slug}</span></p>
         {o.status_reason && <p className="muted">Último motivo: {o.status_reason}</p>}
         <Field label="Motivo (obrigatório para rejeitar ou suspender)"><input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ex.: NUIT não confere com a certidão" /></Field>
         <div className="inline">
@@ -152,7 +152,7 @@ function NewOrg({ toast, onClose }: { toast: (m: string, e?: boolean) => void; o
     setDone({ slug: o.slug, email: f.adminEmail, password: f.adminPassword });
   });
   if (done) {
-    const link = `${location.origin}/empresa/${done.slug}`;
+    const link = `${location.origin}/company/${done.slug}`;
     return (
       <Modal title="Empresa criada" onClose={onClose}>
         <p>A empresa já está <b>activa</b>. Entregue estes dados ao responsável; a palavra-passe <b>não volta a ser mostrada</b>.</p>

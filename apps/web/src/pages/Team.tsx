@@ -14,7 +14,7 @@ export function Team({ me, toast }: { me: any; toast: Toast }) {
   const { busy, run } = useAction(toast);
   const load = useCallback(async () => { const [u, m] = await Promise.all([api('GET', '/users'), api('GET', '/merchants')]); setUsers(u); setMerchants(m); }, []);
   useEffect(() => { load(); }, [load]);
-  const link = `${location.origin}/empresa/${me.orgSlug}`;
+  const link = `${location.origin}/company/${me.orgSlug}`;
 
   return (
     <>

@@ -1,7 +1,8 @@
+import { locale } from '../i18n';
 import { useEffect, useRef, useState } from 'react';
 import './landing.css';
 import { api, mt } from '../api';
-import { Icon, Qr } from '../ui';
+import { Icon, LangSwitch, Qr } from '../ui';
 
 interface Ev { name: string; slug: string; startsAt: string; location: string | null; category: string | null; primary: string | null; minPriceMinor: string | null; cover: number | null }
 
@@ -19,7 +20,7 @@ const TILES: { k: string; no: string; t: string; d: string; wide?: boolean }[] =
 const STEPS: [string, string][] = [['Ligue a sua empresa', 'A equipa Bilhete+ cria a conta da empresa e dá acesso à sua equipa.'], ['Crie e personalize', 'Bilhetes, parâmetros, cores, imagens e local no mapa. Reaproveite outro evento.'], ['Venda, receba e controle', 'Bilhetes online e no balcão, pagamentos nos comerciantes, portaria e relatórios.']];
 
 const price = (e: Ev) => (e.minPriceMinor === null ? 'Em breve' : BigInt(e.minPriceMinor) === 0n ? 'Grátis' : mt(e.minPriceMinor));
-const dayTag = (d: string) => new Date(d).toLocaleDateString('pt-MZ', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/\./g, '').toUpperCase();
+const dayTag = (d: string) => new Date(d).toLocaleDateString(locale(), { day: '2-digit', month: 'short', year: 'numeric' }).replace(/\./g, '').toUpperCase();
 
 export function Home({ canRegister }: { canRegister: boolean }) {
   const [q, setQ] = useState('');
@@ -28,19 +29,20 @@ export function Home({ canRegister }: { canRegister: boolean }) {
   const [solid, setSolid] = useState(false);
   useEffect(() => { const on = () => setSolid(window.scrollY > 24); on(); window.addEventListener('scroll', on, { passive: true }); return () => window.removeEventListener('scroll', on); }, []);
   useEffect(() => { api('GET', '/public/events?limit=8').then((r) => setEvents(r.items)).catch(() => setEvents([])); }, []);
-  const go = (e: React.FormEvent) => { e.preventDefault(); location.assign('/eventos' + (q.trim() ? `?q=${encodeURIComponent(q.trim())}` : '')); };
+  const go = (e: React.FormEvent) => { e.preventDefault(); location.assign('/events' + (q.trim() ? `?q=${encodeURIComponent(q.trim())}` : '')); };
   const scroll = (dir: number) => row.current?.scrollBy({ left: dir * 400, behavior: 'smooth' });
 
   return (
     <div className="lp">
+      {/* menu fixo, fora do herói (que isola o seu empilhamento) para ficar sempre por cima das secções */}
+      <header className={'lp-nav' + (solid ? ' solid' : '')}>
+        <a href="/" aria-label="Bilhete+"><img src={solid ? "/logo-dark.svg" : "/logo-white.svg"} alt="Bilhete+" /></a>
+        <nav aria-label="Secções"><a href="/events">Eventos</a><a href="#o-que-fazemos">O que fazemos</a><a href="#inclusao">Sem smartphone</a><a href="#como-funciona">Como funciona</a></nav>
+        <div className="go"><LangSwitch className="on-dark" /><a className="lp-btn ghost sm" href="/staff">Entrar</a>{canRegister ? <a className="lp-btn sm" href="/register">Registar empresa</a> : <a className="lp-btn sm" href="/events">Explorar</a>}</div>
+      </header>
       {/* ===== HERO ===== */}
       <section className="lp-hero">
         <div className="lp-lines" aria-hidden="true" />
-        <header className={'lp-nav' + (solid ? ' solid' : '')}>
-          <a href="/" aria-label="Bilhete+"><img src={solid ? "/logo-dark.svg" : "/logo-white.svg"} alt="Bilhete+" /></a>
-          <nav aria-label="Secções"><a href="/eventos">Eventos</a><a href="#o-que-fazemos">O que fazemos</a><a href="#inclusao">Sem smartphone</a><a href="#como-funciona">Como funciona</a></nav>
-          <div className="go"><a className="lp-btn ghost sm" href="/staff">Entrar</a>{canRegister ? <a className="lp-btn sm" href="/registo">Registar empresa</a> : <a className="lp-btn sm" href="/eventos">Explorar</a>}</div>
-        </header>
 
         <div className="lp-nav-space" aria-hidden="true" />
         <div className="lp-hero-body">
@@ -49,9 +51,9 @@ export function Home({ canRegister }: { canRegister: boolean }) {
             <p className="lp-lead">Venda bilhetes, controle entradas e receba pagamentos no local com QR, pulseira ou cartão. Para quem tem smartphone e para quem não tem.</p>
             <form className="lp-search" onSubmit={go} role="search">
               <div className="box"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Procurar eventos, locais, organizadores" aria-label="Procurar eventos" /><button type="submit">Procurar</button></div>
-              <div className="lp-chips">{QUICK.map(([qs, l]) => <a key={l} href={'/eventos' + qs}>{l}</a>)}</div>
+              <div className="lp-chips">{QUICK.map(([qs, l]) => <a key={l} href={'/events' + qs}>{l}</a>)}</div>
             </form>
-            <div className="lp-cta-row"><a className="lp-btn" href="/eventos"><Icon n="pin" />Explorar no mapa</a>{canRegister && <a className="lp-btn ghost" href="/registo">Registar empresa</a>}</div>
+            <div className="lp-cta-row"><a className="lp-btn" href="/events"><Icon n="pin" />Explorar no mapa</a>{canRegister && <a className="lp-btn ghost" href="/register">Registar empresa</a>}</div>
           </div>
 
           <div className="lp-stage" aria-hidden="true">
@@ -96,7 +98,7 @@ export function Home({ canRegister }: { canRegister: boolean }) {
             <div className="nav"><button className="lp-arrow" onClick={() => scroll(-1)} aria-label="Anterior" style={{ transform: 'scaleX(-1)' }}><Icon n="arrowup" /></button><button className="lp-arrow" onClick={() => scroll(1)} aria-label="Seguinte"><Icon n="arrowup" /></button></div>
           </div>
           {events === null ? <div className="lp-empty"><p>A carregar eventos…</p></div> : events.length === 0 ? (
-            <div className="lp-empty"><h3>Ainda não há eventos publicados</h3><p className="lp-sub" style={{ margin: 0 }}>Assim que os organizadores publicarem, aparecem aqui e no mapa.</p><a className="lp-btn dark" href="/eventos">Abrir o mapa</a></div>
+            <div className="lp-empty"><h3>Ainda não há eventos publicados</h3><p className="lp-sub" style={{ margin: 0 }}>Assim que os organizadores publicarem, aparecem aqui e no mapa.</p><a className="lp-btn dark" href="/events">Abrir o mapa</a></div>
           ) : (
             <div className="lp-events" ref={row}>
               {events.map((e) => (
@@ -108,7 +110,7 @@ export function Home({ canRegister }: { canRegister: boolean }) {
               ))}
             </div>
           )}
-          <div className="lp-cta-row" style={{ marginTop: 28 }}><a className="lp-btn dark" href="/eventos">Ver todos no mapa<Icon n="arrowup" /></a></div>
+          <div className="lp-cta-row" style={{ marginTop: 28 }}><a className="lp-btn dark" href="/events">Ver todos no mapa<Icon n="arrowup" /></a></div>
         </div>
       </section>
 
@@ -151,13 +153,13 @@ export function Home({ canRegister }: { canRegister: boolean }) {
         <div className="lp-wrap in">
           <span className="lp-label" style={{ color: '#fff' }}>BP/ Comece</span>
           <h2>Leve o seu evento para o digital.</h2>
-          <div className="lp-cta-row"><a className="lp-btn" href="/eventos">Explorar eventos<Icon n="arrowup" /></a><a className="lp-btn ghost" href="/staff">Entrada da equipa</a>{canRegister && <a className="lp-btn ghost" href="/registo">Registar empresa</a>}</div>
+          <div className="lp-cta-row"><a className="lp-btn" href="/events">Explorar eventos<Icon n="arrowup" /></a><a className="lp-btn ghost" href="/staff">Entrada da equipa</a>{canRegister && <a className="lp-btn ghost" href="/register">Registar empresa</a>}</div>
         </div>
       </section>
 
       <footer className="lp-foot">
         <div className="lp-wrap">
-          <div className="row"><span>© Bilhete+ · Moçambique</span><span><a href="/eventos">Eventos</a> · <a href="/staff">Equipa</a></span></div>
+          <div className="row"><span>© Bilhete+ · Moçambique</span><span><a href="/events">Eventos</a> · <a href="/staff">Equipa</a></span></div>
           <div className="giant" aria-hidden="true">Bilhete+</div>
         </div>
       </footer>

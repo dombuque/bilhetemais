@@ -1,3 +1,4 @@
+import { getLang, setLang } from './i18n';
 import QRCode from 'qrcode';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { setToken } from './api';
@@ -83,13 +84,23 @@ export const BarRow = ({ label, value, max, text }: { label: string; value: numb
 /* ---------- estrutura da área da equipa ---------- */
 export interface NavItem { id: string; label: string; icon: string }
 const Account = lazy(() => import('./pages/Account'));
+/** Escolha de língua (PT | EN). */
+export function LangSwitch({ className = '' }: { className?: string }) {
+  const cur = getLang();
+  return (
+    <span className={'langsw ' + className} data-no-translate role="group" aria-label="Language">
+      {(['pt', 'en'] as const).map((l) => <button key={l} type="button" className={'ghost sm' + (cur === l ? ' on' : '')} aria-pressed={cur === l} onClick={() => cur !== l && setLang(l)}>{l.toUpperCase()}</button>)}
+    </span>
+  );
+}
+
 export function Layout({ me, nav, view, onView, children }: { me: any; nav: NavItem[]; view: string; onView: (v: string) => void; children: ReactNode }) {
   const roleName: Record<string, string> = { PLATFORM_ADMIN: 'Administração', ORG_ADMIN: 'Organizador', CASHIER: 'Balcão', MERCHANT_OPERATOR: 'Comerciante', GATE_OPERATOR: 'Acessos' };
   const [account, setAccount] = useState(false);
-  const logout = () => { setToken(null); location.assign(me.orgSlug ? `/empresa/${me.orgSlug}` : '/staff'); };
+  const logout = () => { setToken(null); location.assign(me.orgSlug ? `/company/${me.orgSlug}` : '/staff'); };
   return (
     <div className="shell">
-      <header className="topbar"><img src="/logo-dark.svg" alt="Bilhete+" /><button className="ghost sm" onClick={() => setAccount(true)} aria-label="A minha conta" style={{ marginLeft: 'auto', marginRight: 8 }}>{me.name.split(' ')[0]}</button></header>
+      <header className="topbar"><img src="/logo-dark.svg" alt="Bilhete+" /><LangSwitch /><button className="ghost sm" onClick={() => setAccount(true)} aria-label="A minha conta" style={{ marginLeft: 'auto', marginRight: 8 }}>{me.name.split(' ')[0]}</button></header>
       <nav className="side" aria-label="Navegação">
         <div className="brand"><img src="/logo-dark.svg" alt="Bilhete+" /></div>
         {nav.map((n) => <button key={n.id} className={'navbtn' + (n.id === view ? ' on' : '')} aria-current={n.id === view ? 'page' : undefined} onClick={() => onView(n.id)}><Icon n={n.icon} />{n.label}</button>)}
@@ -97,6 +108,7 @@ export function Layout({ me, nav, view, onView, children }: { me: any; nav: NavI
         <div className="who">
           <b>{me.merchantName ?? me.orgName ?? 'Plataforma'}</b>
           <div className="muted small">{me.name} · {roleName[me.role]}</div>
+          <LangSwitch className="side-lang" />
           <button className="ghost sm" style={{ marginTop: 10 }} onClick={() => setAccount(true)}><Icon n="users" />A minha conta</button>
           <button className="ghost sm" style={{ marginTop: 8 }} onClick={logout}><Icon n="logout" />Sair</button>
         </div>

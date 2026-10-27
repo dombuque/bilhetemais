@@ -41,6 +41,7 @@ const webhook = (evt: object) => {
 const S: Record<string, any> = {};
 const geoCalls: string[] = [];
 // M-Pesa simulado: as respostas são controladas pelo teste
+const googleStub: Record<string, any> = {};
 const mpesaStub: any = { next: [] as any[], calls: [] as any[], query: { outcome: 'PENDING', code: 'INS-0', message: 'por confirmar' } };
 let appInst: any;
 
@@ -50,6 +51,8 @@ beforeAll(async () => {
   db = createDb(TEST_DB, schema);
   await db.query(`INSERT INTO users(email,name,password_hash,role) VALUES('root@bilhete.test','Root',$1,'PLATFORM_ADMIN')`, [hashPassword('pw123456')]);
   appInst = createApp(db, { tokenSecret: 'secret-test', webhookSecret: WEBHOOK_SECRET, selfRegistration: true,
+    publicUrl: 'https://bilhete.test',
+    google: { clientId: 'cid', clientSecret: 'sec', exchange: async (code: string) => { const p = googleStub[code]; if (!p) throw new Error('código recusado'); return p; } },
     mpesa: {
       charge: async (p: any) => { mpesaStub.calls.push(p); const n = mpesaStub.next.shift(); return typeof n === 'function' ? n() : n ?? { outcome: 'SUCCESS', code: 'INS-0', message: 'ok', transactionId: 'TX-' + mpesaStub.calls.length }; },
       query: async () => mpesaStub.query,
@@ -682,6 +685,62 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     expect((await call('POST', '/account/login', { email: 'rita@teste.mz', password: 'nova-senha-123' })).status).toBe(401);
     expect((await db.query<any>(`SELECT email,name FROM accounts WHERE id=$1`, [row.account_id])).rows[0].name).toBe('Conta apagada');
     expect((await call('GET', `/public/tickets/${mine[0].tickets[0].token}`)).status).toBe(200);
+  });
+
+  it('entrada com Google: PKCE e estado de uso único, ligado ao navegador; cria ou liga a conta sem deixar tomar contas por e-mail', async () => {
+    expect((await call('GET', '/public/config')).body.google).toBe(true);
+    const raw = (path: string, cookie?: string) => fetch(base + path, { redirect: 'manual', headers: cookie ? { cookie } : {} });
+    const start = async (next = '/e/festival-de-maputo') => {
+      const r = await raw('/account/google/start?next=' + encodeURIComponent(next));
+      const loc = new URL(r.headers.get('location')!);
+      return { r, loc, state: loc.searchParams.get('state')!, cookie: 'bp_oauth=' + loc.searchParams.get('state') };
+    };
+    const s1 = await start();
+    expect(s1.r.status).toBe(302);
+    expect(s1.loc.origin + s1.loc.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth');
+    expect(Object.fromEntries(s1.loc.searchParams)).toMatchObject({ client_id: 'cid', response_type: 'code', code_challenge_method: 'S256', redirect_uri: 'https://bilhete.test/account/google/callback' });
+    expect(s1.loc.searchParams.get('code_challenge')).toHaveLength(43);
+    expect(s1.r.headers.get('set-cookie')).toMatch(/bp_oauth=.+HttpOnly.+SameSite=Lax.+Secure/);
+    expect(s1.r.headers.get('set-cookie')).not.toContain('Secure;'); // atributo Secure no fim
+    // sem o cookie do navegador, o retorno é recusado (protege contra "login CSRF")
+    googleStub.c1 = { sub: 'g-1', email: 'Maria@Gmail.com', emailVerified: true, name: 'Maria G' };
+    expect((await raw(`/account/google/callback?code=c1&state=${s1.state}`)).headers.get('location')).toBe('/account?error=google_state');
+    // retorno correcto: cria a conta e entrega a sessão no fragmento (#)
+    const ok = await raw(`/account/google/callback?code=c1&state=${s1.state}`, s1.cookie);
+    const back = ok.headers.get('location')!;
+    expect(back).toMatch(/^\/account#t=[\w-]+&next=%2Fe%2Ffestival-de-maputo$/);
+    const tok1 = /t=([\w-]+)/.exec(back)![1];
+    expect((await call('GET', '/account/me', undefined, tok1)).body.account).toMatchObject({ name: 'Maria G', email: 'maria@gmail.com' });
+    // o estado só vale uma vez
+    expect((await raw(`/account/google/callback?code=c1&state=${s1.state}`, s1.cookie)).headers.get('location')).toBe('/account?error=google_state');
+    // a mesma conta Google volta a entrar na mesma conta
+    const s2 = await start();
+    const again = (await raw(`/account/google/callback?code=c1&state=${s2.state}`, s2.cookie)).headers.get('location')!;
+    const tok2 = /t=([\w-]+)/.exec(again)![1];
+    expect((await db.query<any>(`SELECT count(*)::int AS c FROM accounts WHERE lower(email)='maria@gmail.com'`)).rows[0].c).toBe(1);
+    expect((await call('GET', '/account/me', undefined, tok2)).status).toBe(200);
+    // e-mail do Google por verificar, código recusado ou cancelado: não entra
+    googleStub.c2 = { sub: 'g-2', email: 'falso@gmail.com', emailVerified: false, name: 'Falso' };
+    const s3 = await start();
+    expect((await raw(`/account/google/callback?code=c2&state=${s3.state}`, s3.cookie)).headers.get('location')).toBe('/account?error=google_unverified');
+    const s4 = await start();
+    expect((await raw(`/account/google/callback?code=lixo&state=${s4.state}`, s4.cookie)).headers.get('location')).toBe('/account?error=google_failed');
+    expect((await raw('/account/google/callback?error=access_denied&state=x')).headers.get('location')).toBe('/account?error=google_cancelled');
+    // destino inseguro é trocado por /account
+    const s5 = await start('//evil.test');
+    googleStub.c3 = { sub: 'g-3', email: 'tres@gmail.com', emailVerified: true, name: 'Tres' };
+    expect((await raw(`/account/google/callback?code=c3&state=${s5.state}`, s5.cookie)).headers.get('location')).toMatch(/&next=%2Faccount$/);
+    // alguém registou o e-mail de outra pessoa com palavra-passe (sem o confirmar): quando o dono entra com Google, a palavra-passe do intruso deixa de valer
+    await call('POST', '/account/register', { name: 'Intruso', email: 'vitima@gmail.com', password: 'pw-intruso-123' });
+    const intruder = (await call('POST', '/account/login', { email: 'vitima@gmail.com', password: 'pw-intruso-123' })).body.token;
+    googleStub.c4 = { sub: 'g-4', email: 'vitima@gmail.com', emailVerified: true, name: 'Vítima' };
+    const s6 = await start();
+    const owner = /t=([\w-]+)/.exec((await raw(`/account/google/callback?code=c4&state=${s6.state}`, s6.cookie)).headers.get('location')!)![1];
+    expect((await call('GET', '/account/me', undefined, owner)).status).toBe(200);
+    expect((await call('GET', '/account/me', undefined, intruder)).status).toBe(401);
+    expect((await call('POST', '/account/login', { email: 'vitima@gmail.com', password: 'pw-intruso-123' })).status).toBe(401);
+    // contas só Google não podem entrar com palavra-passe (e não rebenta)
+    expect((await call('POST', '/account/login', { email: 'maria@gmail.com', password: '-' })).status).toBe(401);
   });
 
   it('M-Pesa automático: recargas e bilhetes só pelo M-Pesa; recusa, resposta perdida, expiração e duplo clique', async () => {

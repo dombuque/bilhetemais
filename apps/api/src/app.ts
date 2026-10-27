@@ -1,10 +1,11 @@
-import { createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { WalletError, WalletService, hashToken, type Db, type Tx } from './wallet';
 import { queueMail, type Mailer } from './mailer';
 import { normalizeMsisdn, type Mpesa } from './mpesa';
+import { authorizeUrl, exchangeCode, type GoogleConfig } from './google';
 import { hashRecovery, newRecoveryCodes, newSecret, openSecret, otpauthUrl, sealSecret, verifyTotp } from './totp';
 
 export class HttpError extends Error {
@@ -39,6 +40,8 @@ export interface AppConfig {
   selfRegistration?: boolean;
   /** Cliente M-Pesa (recargas e pagamento de bilhetes). Sem ele, o M-Pesa fica indisponível. */
   mpesa?: Mpesa | null;
+  /** Entrada com Google (opcional). */
+  google?: GoogleConfig | null;
   /** Intervalo (ms) da verificação das cobranças M-Pesa por confirmar. */
   mpesaReconcileMs?: number;
   /** SÓ desenvolvimento: permite mostrar o site numa moldura (teste de larguras de telemóvel). Nunca em produção. */
@@ -50,7 +53,9 @@ export interface AppConfig {
 export const hashPassword = (pw: string) => { const salt = randomBytes(16); return salt.toString('hex') + ':' + scryptSync(pw, salt, 32).toString('hex'); };
 const checkPassword = (pw: string, stored: string) => {
   const [salt, h] = stored.split(':');
-  return timingSafeEqual(scryptSync(pw, Buffer.from(salt, 'hex'), 32), Buffer.from(h, 'hex'));
+  if (!salt || !h) return false; // conta sem palavra-passe (só Google)
+  const want = Buffer.from(h, 'hex'), got = scryptSync(pw, Buffer.from(salt, 'hex'), 32);
+  return want.length === got.length && timingSafeEqual(got, want);
 };
 const money = (v: unknown, allowZero = false): bigint => {
   if (typeof v !== 'string' && typeof v !== 'number') throw new HttpError(400, 'valor inválido');
@@ -209,7 +214,7 @@ export function createApp(db: Db, cfg: AppConfig) {
     if (!r.rows[0]) throw new HttpError(404, 'empresa não encontrada');
     await audit(db, req.user, 'org.status', 'organization', req.params.id, { status, reason });
     const o = (await db.query<any>(`SELECT o.slug,o.trade_name,COALESCE(o.billing_email,(SELECT email FROM users WHERE organization_id=o.id AND role='ORG_ADMIN' ORDER BY created_at LIMIT 1)) AS to_email FROM organizations o WHERE o.id=$1`, [req.params.id])).rows[0];
-    const link = `${cfg.publicUrl ?? ''}/empresa/${o.slug}`;
+    const link = `${cfg.publicUrl ?? ''}/company/${o.slug}`;
     const msg: Record<string, [string, string] | undefined> = {
       ACTIVE: ['A sua empresa foi aprovada — Bilhete+', `Boas notícias: ${o.trade_name} foi aprovada. Já pode criar eventos.\n\nÁrea de entrada da sua equipa: ${link}`],
       REJECTED: ['O registo da sua empresa não foi aprovado — Bilhete+', `O registo de ${o.trade_name} não foi aprovado.\nMotivo: ${reason}\n\nPode corrigir os dados, anexar os documentos em falta e voltar a submeter em ${link}`],
@@ -389,6 +394,60 @@ export function createApp(db: Db, cfg: AppConfig) {
     if (p.length < 8 || p.length > 200) throw new HttpError(400, 'a palavra-passe deve ter pelo menos 8 caracteres');
     return p;
   };
+  // ---------- entrada com Google ----------
+  const googleRedirect = () => `${(cfg.publicUrl ?? '').replace(/\/$/, '')}/account/google/callback`;
+  const safeNext = (v: unknown) => (typeof v === 'string' && /^\/(?!\/)[\w\-./?=&%#]*$/.test(v) && v.length <= 200 ? v : '/account');
+  const cookieOf = (req: Request, name: string) => new RegExp(`(?:^|; )${name}=([^;]+)`).exec(req.headers.cookie ?? '')?.[1] ?? null;
+  const secureCookie = (cfg.publicUrl ?? '').startsWith('https://');
+  app.get('/account/google/start', limit(cfg.loginRateLimit), h(async (req, res) => {
+    if (!cfg.google) throw new HttpError(409, 'a entrada com Google não está disponível');
+    const state = randomBytes(24).toString('base64url'), verifier = randomBytes(32).toString('base64url');
+    const challenge = createHash('sha256').update(verifier).digest('base64url');
+    await db.query(`INSERT INTO oauth_states VALUES($1,$2,$3,now()+interval '10 minutes')`, [hashToken(state), verifier, safeNext(req.query.next)]);
+    await db.query(`DELETE FROM oauth_states WHERE expires_at<now()`);
+    // o cookie liga o pedido a este navegador: impede que alguém envie a outra pessoa o seu próprio retorno do Google
+    res.setHeader('Set-Cookie', `bp_oauth=${state}; Path=/account/google; HttpOnly; SameSite=Lax; Max-Age=600${secureCookie ? '; Secure' : ''}`);
+    res.redirect(302, authorizeUrl(cfg.google, { redirectUri: googleRedirect(), state, challenge }));
+    return undefined;
+  }));
+  app.get('/account/google/callback', limit(cfg.loginRateLimit), h(async (req, res) => {
+    const fail = (why: string) => { res.redirect(302, '/account?error=' + encodeURIComponent(why)); return undefined; };
+    if (!cfg.google) return fail('google_off');
+    const state = String(req.query.state ?? ''), code = String(req.query.code ?? '');
+    if (req.query.error || !state || !code) return fail('google_cancelled');
+    if (cookieOf(req as Request, 'bp_oauth') !== state) return fail('google_state');
+    const st = (await db.query<any>(`DELETE FROM oauth_states WHERE state_hash=$1 AND expires_at>now() RETURNING verifier,next`, [hashToken(state)])).rows[0]; // uso único
+    if (!st) return fail('google_state');
+    let p;
+    try { p = await exchangeCode(cfg.google, code, st.verifier, googleRedirect()); } catch { return fail('google_failed'); }
+    if (!p.emailVerified) return fail('google_unverified');
+    p = { ...p, email: p.email.trim().toLowerCase() };
+    const accountId = await db.transaction(async (tx) => {
+      const ident = (await tx.query<any>(`SELECT i.account_id FROM account_identities i JOIN accounts a ON a.id=i.account_id WHERE i.provider='google' AND i.subject=$1 AND a.status='ACTIVE'`, [p.sub])).rows[0];
+      if (ident) return ident.account_id as string;
+      const ex = (await tx.query<any>(`SELECT id,email_verified FROM accounts WHERE lower(email)=$1 AND status='ACTIVE' FOR UPDATE`, [p.email])).rows[0];
+      let id: string;
+      if (ex) {
+        id = ex.id;
+        if (!ex.email_verified) {
+          // a conta foi criada com palavra-passe sem confirmar o e-mail: quem a criou pode não ser o dono. Anula-se a palavra-passe e as sessões.
+          await tx.query(`UPDATE accounts SET password_hash='-' WHERE id=$1`, [id]);
+          await tx.query('DELETE FROM account_sessions WHERE account_id=$1', [id]);
+        }
+        await tx.query('UPDATE accounts SET email_verified=true WHERE id=$1', [id]);
+      } else {
+        id = (await tx.query<any>(`INSERT INTO accounts(email,name,password_hash,email_verified) VALUES($1,$2,'-',true) RETURNING id`, [p.email, p.name.slice(0, 120)])).rows[0].id;
+      }
+      await tx.query(`INSERT INTO account_identities(provider,subject,account_id) VALUES('google',$1,$2)`, [p.sub, id]);
+      return id;
+    });
+    const token = await accountSession(accountId);
+    res.setHeader('Set-Cookie', 'bp_oauth=; Path=/account/google; Max-Age=0');
+    // o token vai no fragmento (#): não chega a servidores nem a registos
+    res.redirect(302, `/account#t=${token}&next=${encodeURIComponent(st.next)}`);
+    return undefined;
+  }));
+
   app.post('/account/register', limit(cfg.loginRateLimit), h(async (req) => {
     const email = validEmail(req.body?.email);
     const name = str(req.body?.name, 'name').trim().slice(0, 120);
@@ -746,7 +805,7 @@ export function createApp(db: Db, cfg: AppConfig) {
   }));
 
   // ---------- leitura para a interface ----------
-  app.get('/public/config', h(async () => ({ baseDomain: cfg.baseDomain ?? null, simulator: !!cfg.simulator, selfRegistration: !!cfg.selfRegistration, mpesa: !!cfg.mpesa })));
+  app.get('/public/config', h(async () => ({ baseDomain: cfg.baseDomain ?? null, simulator: !!cfg.simulator, selfRegistration: !!cfg.selfRegistration, mpesa: !!cfg.mpesa, google: !!cfg.google })));
   /** Só sandbox: equivale a um webhook de sucesso do prestador. */
   app.post('/public/simulate-payment', h(async (req) => {
     if (!cfg.simulator) throw new HttpError(404, 'indisponível');

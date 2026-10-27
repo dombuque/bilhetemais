@@ -1,0 +1,35 @@
+/* Conta do participante — mesma linguagem editorial da página inicial (papel, tinta, ciano, cantos cortados, mono). */
+.pp, .pp-auth { --ink: #0b0820; --paper: #f4f2ee; --violet: #5b2eff; --cyan: #5ce1ff; --line: #dedbd3; --muted: #5f5c7a; --display: 'Archivo Variable', 'Archivo', system-ui, sans-serif; --mono: ui-monospace, 'Cascadia Mono', Consolas, monospace; }
+.pp { min-height: 100vh; background: var(--paper); color: var(--ink); }
+.pp-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; background: var(--ink); color: #fff; position: sticky; top: 0; z-index: 50; }
+.pp-top img { height: 30px; display: block; } .pp-top a { color: #fff; font: 500 .78rem var(--mono); text-transform: uppercase; letter-spacing: .04em; text-decoration: none; } .pp-top-r { display: inline-flex; align-items: center; gap: 14px; }
+.pp-hero { background: var(--violet); color: #fff; padding: 36px 18px 40px; position: relative; overflow: hidden; }
+.pp-hero::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, rgb(255 255 255 / .14) 0 1px, transparent 1px 50%); pointer-events: none; }
+.pp-hero > * { position: relative; z-index: 1; max-width: 880px; margin-inline: auto; display: block; }
+.pp-hero h1 { font: 900 clamp(2.2rem, 1.4rem + 4vw, 4.2rem)/.92 var(--display); font-stretch: 80%; text-transform: uppercase; letter-spacing: -.01em; margin: 10px auto 0; overflow-wrap: anywhere; }
+.pp-hero p { font: 500 .82rem var(--mono); margin: 12px auto 0; opacity: .9; }
+.pp-label { font: 500 .72rem/1 var(--mono); letter-spacing: .05em; text-transform: uppercase; color: inherit; opacity: .85; }
+.pp-main { max-width: 880px; margin: 0 auto; padding: 22px 18px 64px; display: grid; gap: 18px; }
+.pp-card { background: #fff; border: 1px solid var(--line); padding: 22px; display: grid; gap: 14px; clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%); }
+.pp-auth { max-width: 460px; width: 100%; margin: 0 auto; color: var(--ink); }
+.pp-h { font: 900 2rem/.95 var(--display); font-stretch: 80%; text-transform: uppercase; margin: 0; } .pp-h.sm { font-size: 1.25rem; }
+.pp-sub { color: var(--muted); font-size: .92rem; margin: 0; }
+.pp-field { display: grid; gap: 6px; } .pp-field > span:first-child { font: 600 .7rem var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); } .pp-field small { color: var(--muted); font-size: .78rem; }
+.pp input { width: 100%; min-height: 50px; padding: 0 14px; border: 1.5px solid #bdb9ae; border-radius: 0; background: #fff; font: 500 1rem var(--display); color: var(--ink); }
+.pp input:focus { outline: 2px solid var(--cyan); border-color: var(--ink); }
+.pp-pw { position: relative; display: block; } .pp-pw input { padding-right: 90px; } .pp-pw .pp-link { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); }
+.pp-btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 52px; padding: 0 22px; background: var(--cyan); color: var(--ink); border: 0; font: 800 .88rem var(--display); text-transform: uppercase; letter-spacing: .03em; text-decoration: none; cursor: pointer; width: 100%; clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%); border-radius: 0; box-shadow: none; }
+.pp-btn:hover:not(:disabled) { background: var(--ink); color: #fff; transform: none; } .pp-btn:disabled { opacity: .45; cursor: not-allowed; }
+.pp-btn.alt { background: var(--ink); color: #fff; } .pp-btn.alt:hover { background: var(--violet); } .pp-btn.danger { background: #c4271d; color: #fff; }
+.pp-link { background: none; border: 0; padding: 8px 10px; color: var(--violet); font: 700 .78rem var(--mono); text-transform: uppercase; letter-spacing: .03em; cursor: pointer; min-height: 40px; border-radius: 0; box-shadow: none; clip-path: none; } .pp-link:hover:not(:disabled) { background: none; text-decoration: underline; transform: none; } .pp-link.center { justify-self: center; }
+.pp-google { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 52px; background: #fff; color: var(--ink); border: 1.5px solid var(--ink); font: 700 .95rem var(--display); text-decoration: none; } .pp-google:hover { background: #f4f2ee; }
+.pp-or { display: flex; align-items: center; gap: 12px; color: var(--muted); font: 500 .72rem var(--mono); text-transform: uppercase; } .pp-or::before, .pp-or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.pp-tabs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } .pp-tabs button:not(.pp-link) { min-height: 42px; padding: 0 16px; border: 1.5px solid #bdb9ae; background: transparent; color: var(--ink); font: 600 .75rem var(--mono); text-transform: uppercase; letter-spacing: .04em; border-radius: 0; cursor: pointer; box-shadow: none; clip-path: none; }
+.pp-tabs button.on { background: var(--ink); color: #fff; border-color: var(--ink); } .pp-tabs .out { margin-left: auto; display: inline-flex; gap: 6px; align-items: center; }
+.pp-orders { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
+.pp-ticket { background: #fff; border: 1px solid var(--line); clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%); }
+.pp-ticket-top { background: var(--ink); color: #fff; padding: 18px 18px 22px; display: grid; gap: 8px; } .pp-ticket-top h3 { font: 900 1.45rem/1 var(--display); font-stretch: 80%; text-transform: uppercase; margin: 0; } .pp-ticket-top p { margin: 0; font: 500 .78rem var(--mono); opacity: .8; text-transform: uppercase; }
+.pp-perf { height: 0; border-top: 2px dashed #bdb9ae; margin: 0 14px; position: relative; } .pp-perf::before, .pp-perf::after { content: ''; position: absolute; top: -11px; width: 20px; height: 20px; border-radius: 50%; background: var(--paper); } .pp-perf::before { left: -24px; } .pp-perf::after { right: -24px; }
+.pp-ticket-bot { padding: 18px; display: grid; gap: 10px; }
+.pp-alert { background: #fde3e0; color: #7a1710; border-left: 4px solid #c4271d; padding: 12px 14px; margin: 0; font-size: .92rem; }
+@media (min-width: 900px) { .pp-hero { padding: 56px 32px 60px; } .pp-main { padding-top: 32px; } .pp-auth { margin-top: 8px; } }

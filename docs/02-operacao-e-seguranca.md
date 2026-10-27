@@ -17,15 +17,15 @@
 Todas as rotas de evento verificam que o evento pertence à empresa do utilizador (404 caso contrário). Um comerciante só cobra carteiras do seu evento.
 
 ## Registo de empresas (self-service) e aprovação — DESLIGADO por omissão
-Por decisão actual, **as empresas são criadas pela administração em `/staff`** (ficam activas e a palavra-passe inicial é mostrada uma vez). O registo público existe mas está atrás do interruptor `SELF_REGISTRATION=true` (por omissão desligado: `/public/register` responde 404 e `/registo` mostra «registo fechado»). O texto abaixo descreve o fluxo quando o interruptor está ligado.
+Por decisão actual, **as empresas são criadas pela administração em `/staff`** (ficam activas e a palavra-passe inicial é mostrada uma vez). O registo público existe mas está atrás do interruptor `SELF_REGISTRATION=true` (por omissão desligado: `/public/register` responde 404 e `/register` mostra «registo fechado»). O texto abaixo descreve o fluxo quando o interruptor está ligado.
 
-1. Qualquer pessoa regista a empresa em `/registo` (denominação, nome comercial, NUIT de 9 dígitos, responsável, e-mail, palavra-passe, aceitação dos termos). Limite de 5 registos/minuto por IP.
+1. Qualquer pessoa regista a empresa em `/register` (denominação, nome comercial, NUIT de 9 dígitos, responsável, e-mail, palavra-passe, aceitação dos termos). Limite de 5 registos/minuto por IP.
 2. A empresa fica **PENDENTE**. O responsável pode entrar, completar o perfil, anexar documentos (PDF/PNG/JPEG até 3 MB) e escolher a marca, mas **não pode criar eventos nem operar** até ser aprovada.
 3. A administração Bilhete+ revê (documentos descarregados como anexo), aprova, rejeita ou suspende, com motivo obrigatório para rejeitar/suspender. A empresa rejeitada pode corrigir e voltar a submeter.
 4. Pendente: notificações por e-mail (aprovação/rejeição) e verificação do e-mail — exigem SMTP configurado.
 
 ## Área própria, equipa e isolamento por empresa
-- Cada empresa tem um endereço de entrada próprio, `/empresa/<identificador>`, com o nome, as cores e o logótipo dela. O identificador é gerado a partir do nome comercial e é único.
+- Cada empresa tem um endereço de entrada próprio, `/company/<identificador>`, com o nome, as cores e o logótipo dela. O identificador é gerado a partir do nome comercial e é único.
 - Só os utilizadores dessa empresa entram por esse endereço: credenciais certas de outra empresa (ou da administração Bilhete+) são recusadas com a mesma mensagem genérica. Quem já tem sessão de outra empresa e abre o endereço é desligado e volta a ver a entrada.
 - A empresa gere a sua **equipa** (criar, desactivar/activar, repor palavra-passe; repor ou desactivar termina as sessões abertas). Só vê os seus utilizadores, comerciantes e eventos; os pedidos a recursos de outra empresa respondem «não encontrado».
 - Cada utilizador pode alterar a própria palavra-passe. Um administrador não se pode desactivar a si próprio.

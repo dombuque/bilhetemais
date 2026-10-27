@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, getToken, setToken } from '../api';
-import { Field, Icon, Layout, PageHead, Skeleton, useAction, useToast } from '../ui';
+import { Field, Icon, LangSwitch, Layout, PageHead, Skeleton, useAction, useToast } from '../ui';
 import { themeStyle, type Theme } from '../theme';
 import { Cashier } from './Cashier';
 import { Company } from './Company';
@@ -39,6 +39,7 @@ function Login({ onDone, org, canRegister }: { onDone: () => void; org?: OrgArea
         {org && <p className="small" style={{ opacity: .7 }}>Tecnologia Bilhete+</p>}
       </aside>
       <main className="formpane">
+        <LangSwitch className="login-lang" />
         <div className="stack" style={{ width: 'min(400px, 100%)' }}>
           <a href="/" className="mobile-only" style={{ marginBottom: 8 }}>{org ? <b style={{ font: '800 1.3rem var(--font-display)' }}>{org.name}</b> : <img src="/logo.svg" alt="Bilhete+" style={{ height: 36 }} />}</a>
           <div><h1>Entrar</h1><p className="muted" style={{ marginTop: 6 }}>{org ? `Equipa de ${org.name}` : 'Acesso da equipa e dos organizadores.'}</p></div>
@@ -46,7 +47,7 @@ function Login({ onDone, org, canRegister }: { onDone: () => void; org?: OrgArea
           <Field label="Palavra-passe"><div className="pw"><input type={show ? 'text' : 'password'} value={password} autoComplete="current-password" onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} /><button type="button" onClick={() => setShow(!show)} aria-label={show ? 'Esconder palavra-passe' : 'Mostrar palavra-passe'}>{show ? 'Esconder' : 'Mostrar'}</button></div></Field>
           {needCode && <Field label="Código de verificação" hint="6 dígitos da app de autenticação, ou um código de recuperação."><input value={code} autoFocus inputMode="numeric" autoComplete="one-time-code" onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} /></Field>}
           <button className="big wide" disabled={busy || !email || !password || (needCode && !code)} onClick={submit}>{busy ? 'A entrar…' : needCode ? 'Verificar e entrar' : 'Entrar'}</button>
-          {!org && canRegister && <p className="muted center">Organiza eventos? <a href="/registo">Registe a sua empresa</a></p>}
+          {!org && canRegister && <p className="muted center">Organiza eventos? <a href="/register">Registe a sua empresa</a></p>}
         </div>
         {toast.node}
       </main>

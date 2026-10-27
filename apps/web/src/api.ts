@@ -1,3 +1,4 @@
+import { locale } from './i18n';
 export class ApiError extends Error {
   constructor(public status: number, message: string, public code?: string) { super(message); }
 }
@@ -64,7 +65,7 @@ export const toMinor = (v: string) => {
   if (!m) return null;
   return String(Number(m[1]) * 100 + Number((m[2] ?? '').padEnd(2, '0') || 0));
 };
-export const dt = (s: string) => new Date(s).toLocaleString('pt-MZ', { dateStyle: 'medium', timeStyle: 'short' });
+export const dt = (s: string) => new Date(s).toLocaleString(locale(), { dateStyle: 'medium', timeStyle: 'short' });
 export const newKey = () => crypto.randomUUID();
 
 /** Envia um ficheiro em bruto (imagens da marca, documentos). */

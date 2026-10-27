@@ -353,3 +353,12 @@ body:has(.shell) { background: #f4f2ee; }
 .login:not(.branded) .brandpane::after { background: repeating-linear-gradient(90deg, rgb(255 255 255 / .14) 0 1px, transparent 1px 50%); width: 100%; height: 100%; left: 0; bottom: 0; border-radius: 0; }
 .login .brandpane > * { position: relative; z-index: 1; }
 .login .brandpane li span { border-radius: 0 !important; background: #5ce1ff !important; color: #0b0820; }
+
+/* escolha de língua */
+.langsw { display: inline-flex; gap: 0; } .langsw button { min-height: 30px; padding: 0 9px; font-size: .72rem; border-radius: 0; box-shadow: none; clip-path: none; }
+.langsw button.on { background: #0b0820; color: #fff; border-color: #0b0820; }
+.langsw.on-dark button { color: #fff; border-color: rgb(255 255 255 / .5); background: transparent; } .langsw.on-dark button.on { background: #5ce1ff; color: #0b0820; border-color: #5ce1ff; }
+.shell .side .who .langsw { display: flex; margin-top: 10px; } .shell .side .who .langsw button { flex: 1; color: #fff; border-color: rgb(255 255 255 / .4); background: transparent; margin: 0; width: auto; justify-content: center; } .shell .side .who .langsw button.on { background: #5ce1ff; color: #0b0820; border-color: #5ce1ff; }
+.shell .topbar .langsw { margin-left: auto; margin-right: 8px; } .shell .topbar .langsw button { color: #fff; border-color: rgb(255 255 255 / .5); } .shell .topbar .langsw button.on { background: #5ce1ff; color: #0b0820; border-color: #5ce1ff; }
+.pub-bar .langsw { margin-left: auto; margin-right: 12px; }
+.login .formpane { position: relative; } .login-lang { position: absolute; right: 18px; top: 16px; }

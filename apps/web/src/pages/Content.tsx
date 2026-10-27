@@ -1,3 +1,4 @@
+import { locale } from '../i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, dt, getToken, shrinkImage, upload } from '../api';
 import { ConfirmButton, Empty, Field, Icon, useAction } from '../ui';
@@ -71,7 +72,7 @@ export function ContentTab({ id, ev, toast, onChange }: { id: string; ev: any; t
       <div className="card stack">
         <h3>Programa</h3>
         {sessions.length === 0 ? <Empty icon="chart">Sem sessões. Adicione actuações, palestras ou momentos do evento.</Empty> : sessions.map((x) => (
-          <div className="between" key={x.id}><span><b>{x.title}</b>{x.stage && <span className="pill" style={{ marginLeft: 6 }}>{x.stage}</span>}<br /><small className="muted">{dt(x.starts_at)}{x.ends_at ? ` → ${new Date(x.ends_at).toLocaleTimeString('pt-MZ', { hour: '2-digit', minute: '2-digit' })}` : ''}</small></span>
+          <div className="between" key={x.id}><span><b>{x.title}</b>{x.stage && <span className="pill" style={{ marginLeft: 6 }}>{x.stage}</span>}<br /><small className="muted">{dt(x.starts_at)}{x.ends_at ? ` → ${new Date(x.ends_at).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}` : ''}</small></span>
             <ConfirmButton label="Remover" confirmLabel="Confirmar" className="danger ghost sm" onConfirm={() => run(async () => { await api('DELETE', `/events/${id}/sessions/${x.id}`); await load(); })} /></div>))}
         <div className="field-row">
           <Field label="Título"><input value={s.title} onChange={(e) => setS({ ...s, title: e.target.value })} /></Field>

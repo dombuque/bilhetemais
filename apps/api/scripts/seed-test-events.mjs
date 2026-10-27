@@ -93,7 +93,7 @@ if (creds && firstId) {
   for (const [email, role, extra] of [['balcao@teste.bilhete', 'CASHIER', {}], ['porta@teste.bilhete', 'GATE_OPERATOR', {}], ['bar@teste.bilhete', 'MERCHANT_OPERATOR', { merchantId: bar.id }]])
     await j('POST', '/users', { email, name: email.split('@')[0], password: creds.pw, role, ...extra }, t);
   if (CRED_FILE) {
-    writeFileSync(CRED_FILE, `Empresa de teste: ${SLUG_NAME}\nEntrada da equipa: /empresa/${org.slug}\nUtilizadores (mesma palavra-passe): organizador@teste.bilhete, balcao@teste.bilhete, porta@teste.bilhete, bar@teste.bilhete\nPalavra-passe: ${creds.pw}\n`, { mode: 0o600 });
+    writeFileSync(CRED_FILE, `Empresa de teste: ${SLUG_NAME}\nEntrada da equipa: /company/${org.slug}\nUtilizadores (mesma palavra-passe): organizador@teste.bilhete, balcao@teste.bilhete, porta@teste.bilhete, bar@teste.bilhete\nPalavra-passe: ${creds.pw}\n`, { mode: 0o600 });
     console.log('credenciais guardadas em', CRED_FILE);
   }
 }

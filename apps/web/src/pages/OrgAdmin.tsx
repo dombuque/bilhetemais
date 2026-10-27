@@ -1,3 +1,4 @@
+import { locale } from '../i18n';
 import { useCallback, useEffect, useState } from 'react';
 import { api, dt, mt, toMinor } from '../api';
 import { BarRow, ConfirmButton, Empty, Field, Icon, Layout, Modal, MoneyInput, PageHead, Pill, Skeleton, useAction, useToast } from '../ui';
@@ -50,7 +51,7 @@ function Events({ onOpen, toast }: { onOpen: (id: string) => void; toast: Toast 
               <div style={{ padding: 20, display: 'flex', gap: 16, alignItems: 'flex-start' }}>
                 <div style={{ textAlign: 'center', minWidth: 58, padding: '8px 0', borderRadius: 14, background: 'var(--surface-2)' }}>
                   <div style={{ font: '800 1.5rem/1 var(--font-display)' }}>{d.getDate()}</div>
-                  <div className="eyebrow" style={{ marginTop: 4 }}>{d.toLocaleDateString('pt-MZ', { month: 'short' }).replace('.', '')}</div>
+                  <div className="eyebrow" style={{ marginTop: 4 }}>{d.toLocaleDateString(locale(), { month: 'short' }).replace('.', '')}</div>
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }} className="stack-sm">
                   <div className="between" style={{ alignItems: 'flex-start' }}><h3 style={{ fontSize: '1.1rem' }}>{e.name}</h3><Pill s={e.status} /></div>

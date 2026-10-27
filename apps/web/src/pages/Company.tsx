@@ -41,7 +41,7 @@ export function Company({ toast, onStatus }: { toast: Toast; onStatus?: () => vo
     <div className="stack">
       <ApprovalBanner status={p.status} reason={p.status_reason} />
       {p.status === 'REJECTED' && <button onClick={() => run(async () => { await api('POST', '/org/resubmit', {}); await load(); onStatus?.(); }, 'Registo submetido novamente')}>Submeter novamente para aprovação</button>}
-      <div className="card flat"><b>Área de entrada da equipa</b><p className="mono" style={{ marginTop: 4 }}>{location.origin}/empresa/{p.slug}</p></div>
+      <div className="card flat"><b>Área de entrada da equipa</b><p className="mono" style={{ marginTop: 4 }}>{location.origin}/company/{p.slug}</p></div>
       <div className="card stack">
         <h2>Dados da empresa</h2>
         <p className="muted small">{p.legal_name} · NUIT {p.nuit}</p>

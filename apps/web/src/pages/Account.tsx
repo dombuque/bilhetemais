@@ -55,7 +55,7 @@ export default function Account({ me, onClose }: { me: any; onClose: () => void 
           <button className="ghost" disabled={busy} onClick={() => run(async () => { const r = await api('POST', '/me/mfa/setup', {}); setMfa({ secret: r.secret, url: r.otpauthUrl }); })}>Activar verificação em dois passos</button>
         )}
       </section>
-      <button className="ghost" onClick={() => { setToken(null); location.assign(me.orgSlug ? `/empresa/${me.orgSlug}` : '/staff'); }}>Terminar sessão</button>
+      <button className="ghost" onClick={() => { setToken(null); location.assign(me.orgSlug ? `/company/${me.orgSlug}` : '/staff'); }}>Terminar sessão</button>
       {toast.node}
     </Modal>
   );

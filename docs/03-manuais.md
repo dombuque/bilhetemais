@@ -10,7 +10,7 @@
 3. Na ficha vê a equipa, os eventos e o endereço de entrada da empresa, só em leitura.
 
 ## 2. Organizador (administrador da empresa)
-1. **Acesso**: a empresa é criada pela equipa Bilhete+, que lhe entrega o endereço `/empresa/<o-seu-nome>`, o e-mail e a palavra-passe inicial. Altere a palavra-passe em «A minha conta».
+1. **Acesso**: a empresa é criada pela equipa Bilhete+, que lhe entrega o endereço `/company/<o-seu-nome>`, o e-mail e a palavra-passe inicial. Altere a palavra-passe em «A minha conta».
 2. **Empresa**: complete os dados, anexe documentos e defina a **marca por omissão** (cores, logótipo).
 3. **Equipa**: crie balcão, comerciantes e portaria; reponha palavras-passe; desactive quem sai. Partilhe o endereço de entrada da equipa.
 4. **Eventos → Novo evento**. Pode começar do zero ou **basear noutro evento** (copia bilhetes, portas, comerciantes e herda parâmetros e aparência).

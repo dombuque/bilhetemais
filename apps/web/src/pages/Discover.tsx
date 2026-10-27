@@ -1,3 +1,4 @@
+import { locale } from '../i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, mt } from '../api';
 import { fmtDist, googleDirections, km, loadMapLibre, MAP_STYLE, MAPUTO, userDot, wazeDirections, webglOk, type MLMap } from '../map/mapkit';
@@ -8,8 +9,8 @@ interface Place { name: string; lat: number; lng: number }
 
 const CATS: Record<string, string> = { MUSICA: 'Música', FESTIVAL: 'Festival', CONFERENCIA: 'Conferência', FEIRA: 'Feira', DESPORTO: 'Desporto', TEATRO: 'Teatro', GASTRONOMIA: 'Gastronomia', EMPRESARIAL: 'Empresarial', OUTRO: 'Outro' };
 const WHEN: [string, string][] = [['today', 'Hoje'], ['week', 'Esta semana'], ['month', 'Este mês']];
-const price = (i: Item) => (i.minPriceMinor === null ? '' : BigInt(i.minPriceMinor) === 0n ? 'Grátis' : `${(Number(i.minPriceMinor) / 100).toLocaleString('pt-MZ', { maximumFractionDigits: 0 })} MT`);
-const dayLabel = (d: string) => new Date(d).toLocaleDateString('pt-MZ', { weekday: 'short', day: 'numeric', month: 'short' }).replace('.', '');
+const price = (i: Item) => (i.minPriceMinor === null ? '' : BigInt(i.minPriceMinor) === 0n ? 'Grátis' : `${(Number(i.minPriceMinor) / 100).toLocaleString(locale(), { maximumFractionDigits: 0 })} MT`);
+const dayLabel = (d: string) => new Date(d).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' }).replace('.', '');
 const useDebounced = <T,>(v: T, ms: number) => { const [d, setD] = useState(v); useEffect(() => { const t = setTimeout(() => setD(v), ms); return () => clearTimeout(t); }, [v, ms]); return d; };
 
 /** Descoberta de eventos: mapa a ecrã inteiro, pesquisa, filtros, pins com preço e lista numa folha. */
@@ -44,7 +45,7 @@ export default function Discover() {
     if (cat) sp.set('category', cat);
     if (when) sp.set('when', when);
     if (free) sp.set('free', '1');
-    history.replaceState(null, '', '/eventos' + (sp.toString() ? '?' + sp : ''));
+    history.replaceState(null, '', '/events' + (sp.toString() ? '?' + sp : ''));
     api('GET', '/public/events?' + sp + (sp.toString() ? '&' : '') + 'limit=24').then(setData).catch(() => setData({ items: [], total: 0, facets: [] }));
   }, [dq, cat, when, free]);
 
