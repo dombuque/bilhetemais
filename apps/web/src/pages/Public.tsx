@@ -47,11 +47,11 @@ export function PublicEvent({ slug, cfg }: { slug: string; cfg: Config }) {
   const [err, setErr] = useState(false);
   const [qty, setQty] = useState<Record<string, number>>({});
   const [checkout, setCheckout] = useState(false);
+  const [phone, setPhone] = useState(() => { try { return localStorage.getItem('bp_phone') ?? ''; } catch { return ''; } });
   const { me, refresh, logout } = useAccount();
   const toast = useToast();
   const { busy, run } = useAction(toast.show);
   useEffect(() => { api('GET', `/public/events/${slug}`).then(setEv).catch(() => setErr(true)); }, [slug]);
-  void cfg;
 
   if (err) return <Frame><Empty icon="ticket">Evento não encontrado ou ainda não publicado.</Empty></Frame>;
   if (!ev) return <Frame><Skeleton rows={4} /></Frame>;
@@ -61,8 +61,15 @@ export function PublicEvent({ slug, cfg }: { slug: string; cfg: Config }) {
   const total = ev.ticketTypes.reduce((s: bigint, t: any) => s + BigInt(t.price_minor) * BigInt(qty[t.id] ?? 0), 0n);
   const cta = ev.theme.ctaLabel || 'Comprar';
   const buy = () => run(async () => {
-    try { const o = await accountApi('POST', `/public/events/${slug}/orders`, { items }); location.assign('/o/' + o.orderId); }
-    catch (e: any) { if (e?.code === 'LOGIN_REQUIRED') refresh(); throw e; }
+    try {
+      const o = await accountApi('POST', `/public/events/${slug}/orders`, { items });
+      // bilhetes pagos: o pagamento por M-Pesa arranca já aqui (o pedido de PIN chega ao telemóvel) e a encomenda acompanha-o
+      if (o.status === 'PENDING_PAYMENT') {
+        try { localStorage.setItem('bp_phone', phone); } catch { /* sem armazenamento */ }
+        try { await api('POST', `/public/orders/${o.orderId}/pay`, { phone }); } catch (e: any) { toast.show(e.message, true); }
+      }
+      location.assign('/o/' + o.orderId);
+    } catch (e: any) { if (e?.code === 'LOGIN_REQUIRED') refresh(); throw e; }
   });
   const day = new Date(ev.startsAt).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
 
@@ -73,7 +80,7 @@ export function PublicEvent({ slug, cfg }: { slug: string; cfg: Config }) {
         <Countdown startsAt={ev.startsAt} endsAt={ev.endsAt} />
       </Cover>}
       bar={count > 0 && !checkout && (
-        <div className="sticky-bar mobile-only"><div className="in"><div><b>{count} bilhete{count > 1 ? 's' : ''}</b><div className="muted small">{mt(total)}</div></div><button className="big" onClick={() => setCheckout(true)}>{cta}<Icon n="arrowup" /></button></div></div>
+        <div className="sticky-bar mobile-only"><div className="in"><div><b>{count} bilhete{count > 1 ? 's' : ''}</b><div className="muted small">{mt(total)}</div></div><button className="big" onClick={() => setCheckout(true)}>{cta}<Icon n="arrowright" /></button></div></div>
       )}>
       <div className="pub-layout">
         <aside className="pub-aside stack">
@@ -96,7 +103,7 @@ export function PublicEvent({ slug, cfg }: { slug: string; cfg: Config }) {
             <div className="perf" />
             <div className="bottom stack-sm">
               <div className="between"><span className="muted">{count ? `${count} bilhete${count > 1 ? 's' : ''}` : 'Escolha os bilhetes'}</span><b className="price" style={{ fontSize: '1.3rem' }}>{mt(total)}</b></div>
-              {!checkout && <button className="big wide desktop-only" disabled={!count} onClick={() => setCheckout(true)}>{cta}<Icon n="arrowup" /></button>}
+              {!checkout && <button className="big wide desktop-only" disabled={!count} onClick={() => setCheckout(true)}>{cta}<Icon n="arrowright" /></button>}
             </div>
           </section>
           {checkout && (
@@ -105,7 +112,12 @@ export function PublicEvent({ slug, cfg }: { slug: string; cfg: Config }) {
               <h2>Confirmar compra</h2>
               <p>A comprar como <b>{me.name}</b><br /><span className="muted small">{me.email}</span></p>
               <p className="muted small">Os bilhetes ficam na sua conta, em «Os meus bilhetes».</p>
-              <button className="big wide" disabled={busy || count === 0} onClick={buy}>{busy ? 'A processar…' : total === 0n ? 'Obter bilhetes' : `Pagar ${mt(total)}`}</button>
+              {total > 0n && <>
+                <div className="mpesa-badge"><img src="/mpesa.svg" alt="M-Pesa" height="28" /><span className="muted small">Pagamento seguro por M-Pesa</span></div>
+                <Field label="Número M-Pesa (Vodacom)" hint="Vai receber um pedido de PIN no telemóvel."><input type="tel" inputMode="tel" autoComplete="tel-national" placeholder="84 123 4567" value={phone} onChange={(e) => setPhone(e.target.value)} /></Field>
+              </>}
+              <button className="big wide" disabled={busy || count === 0 || (total > 0n && (!cfg.mpesa || phone.replace(/\D/g, '').length < 9))} onClick={buy}>{busy ? 'A processar…' : total === 0n ? 'Obter bilhetes' : `Pagar ${mt(total)} com M-Pesa`}</button>
+              {total > 0n && !cfg.mpesa && <p className="muted small">O pagamento por M-Pesa não está disponível de momento.</p>}
               <button className="ghost wide" onClick={() => setCheckout(false)}>Voltar</button>
               <button type="button" className="ghost sm" onClick={logout}>Não é {me.name.split(' ')[0]}? Sair</button>
             </section>)
@@ -125,9 +137,9 @@ export function PublicEvent({ slug, cfg }: { slug: string; cfg: Config }) {
 }
 
 /** Pagamento por M-Pesa: pede o número, dispara a cobrança e acompanha-a até o M-Pesa confirmar ou recusar. */
-function MpesaPay({ label, start, onDone }: { label: string; start: (phone: string) => Promise<{ chargeId: string }>; onDone: () => void }) {
+function MpesaPay({ label, start, onDone, resume }: { label: string; start: (phone: string) => Promise<{ chargeId: string }>; onDone: () => void; resume?: string | null }) {
   const [phone, setPhone] = useState(() => { try { return localStorage.getItem('bp_phone') ?? ''; } catch { return ''; } });
-  const [charge, setCharge] = useState<string | null>(null);
+  const [charge, setCharge] = useState<string | null>(resume ?? null); // retoma um pagamento já iniciado (ex.: vindo do ecrã de compra)
   const [state, setState] = useState<{ status: string; reason?: string | null } | null>(null);
   const toast = useToast();
   const { busy, run } = useAction(toast.show);
@@ -203,7 +215,7 @@ export function Order({ id, cfg }: { id: string; cfg: Config }) {
         {o.status === 'PENDING_PAYMENT' && <>
           <p className="muted">O bilhete só é emitido depois de o prestador de pagamento confirmar o pagamento. Esta página actualiza sozinha.</p>
           {cfg.mpesa && <div className="mpesa-badge"><img src="/mpesa.svg" alt="M-Pesa" height="28" /><span className="muted small">Pagamento seguro por M-Pesa</span></div>}
-          {cfg.mpesa && <MpesaPay label={`Pagar ${mt(o.total_minor)} com M-Pesa`} start={(phone) => api('POST', `/public/orders/${id}/pay`, { phone })} onDone={load} />}
+          {cfg.mpesa && <MpesaPay resume={o.chargeId} label={`Pagar ${mt(o.total_minor)} com M-Pesa`} start={(phone) => api('POST', `/public/orders/${id}/pay`, { phone })} onDone={load} />}
         </>}
       </div>
       {paid && <EmailTickets id={id} />}
@@ -351,14 +363,14 @@ export function Register() {
             <Field label="Telefone" hint="Opcional."><input type="tel" value={f.phone} onChange={set('phone')} autoComplete="tel" /></Field>
           </div>
           <Field label="Endereço" hint="Opcional."><input value={f.address} onChange={set('address')} autoComplete="street-address" /></Field>
-          <button className="big wide" disabled={!ok0} onClick={() => setStep(1)}>Continuar<Icon n="arrowup" /></button>
+          <button className="big wide" disabled={!ok0} onClick={() => setStep(1)}>Continuar<Icon n="arrowright" /></button>
         </div>}
 
         {step === 1 && <div className="stack">
           <Field label="Nome do responsável"><input value={f.contactName} onChange={set('contactName')} autoComplete="name" autoFocus /></Field>
           <Field label="E-mail" hint="Será o seu utilizador de acesso."><input type="email" value={f.email} onChange={set('email')} autoComplete="email" /></Field>
           <Field label="Palavra-passe" hint="Pelo menos 8 caracteres."><div className="pw"><input type={show ? 'text' : 'password'} value={f.password} onChange={set('password')} autoComplete="new-password" /><button type="button" onClick={() => setShow(!show)} aria-label={show ? 'Esconder palavra-passe' : 'Mostrar palavra-passe'}>{show ? 'Esconder' : 'Mostrar'}</button></div></Field>
-          <div className="inline"><button className="ghost big" onClick={() => setStep(0)}>Voltar</button><button className="big" style={{ flex: 1 }} disabled={!ok1} onClick={() => setStep(2)}>Continuar<Icon n="arrowup" /></button></div>
+          <div className="inline"><button className="ghost big" onClick={() => setStep(0)}>Voltar</button><button className="big" style={{ flex: 1 }} disabled={!ok1} onClick={() => setStep(2)}>Continuar<Icon n="arrowright" /></button></div>
         </div>}
 
         {step === 2 && <div className="stack">

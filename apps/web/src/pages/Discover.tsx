@@ -200,7 +200,7 @@ export default function Discover() {
                 <div className="between"><span className="price">{price(i) || 'Em breve'}</span>
                   {i.slug === selected && i.lat !== null
                     ? <a className="btn ghost sm" href={googleDirections(i.lat, i.lng!)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}><Icon n="pin" />Como chegar</a>
-                    : <span className="go" aria-hidden="true"><Icon n="arrowup" /></span>}</div>
+                    : <span className="go" aria-hidden="true"><Icon n="arrowright" /></span>}</div>
               </div>
             </article>
           ))}

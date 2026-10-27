@@ -14,7 +14,7 @@ const PATHS: Record<string, string> = {
   logout: 'M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10', back: 'M15 5l-7 7 7 7',
   refund: 'M3 12a9 9 0 1 0 3-6.7M3 4v5h5', cart: 'M3 4h2l2.5 11h10L20 7H6M9 20v.01M17 20v.01', scan: 'M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M4 12h16',
   calendar: 'M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2zM4 10h16M8 3v4M16 3v4', pin: 'M12 21s7-6.2 7-11a7 7 0 0 0-14 0c0 4.8 7 11 7 11zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z',
-  alert: 'M12 4l9 16H3zM12 10v4M12 17v.01', home: 'M4 11l8-7 8 7v9H4zM10 20v-6h4v6', arrowup: 'M12 19V5M6 11l6-6 6 6', arrowdown: 'M12 5v14M6 13l6 6 6-6', box: 'M21 8l-9-5-9 5v8l9 5 9-5zM3 8l9 5 9-5M12 13v8',
+  alert: 'M12 4l9 16H3zM12 10v4M12 17v.01', home: 'M4 11l8-7 8 7v9H4zM10 20v-6h4v6', arrowup: 'M12 19V5M6 11l6-6 6 6', arrowleft: 'M19 12H5M11 6l-6 6 6 6', arrowright: 'M5 12h14M13 6l6 6-6 6', arrowdown: 'M12 5v14M6 13l6 6 6-6', box: 'M21 8l-9-5-9 5v8l9 5 9-5zM3 8l9 5 9-5M12 13v8',
 };
 export const Icon = ({ n, className = 'icon' }: { n: string; className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={PATHS[n] ?? ''} /></svg>

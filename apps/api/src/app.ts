@@ -354,6 +354,14 @@ export function createApp(db: Db, cfg: AppConfig) {
       await wallet.issueCredential(w, t.format === 'PHYSICAL' ? 'PHYSICAL_TICKET' : 'APP_QR', tx, tokenFor(t.id));
       await tx.query(`UPDATE tickets SET status='ISSUED', wallet_id=$2 WHERE id=$1`, [t.id, w]);
     }
+    // e-mail automático com os bilhetes (para compras com conta; compras de balcão têm telefone, não e-mail)
+    const o = (await tx.query<any>('SELECT o.buyer_name,o.buyer_contact,o.channel,e.name AS event FROM ticket_orders o JOIN events e ON e.id=o.event_id WHERE o.id=$1', [orderId])).rows[0];
+    if (ts.rows.length && o?.channel === 'ONLINE' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(o.buyer_contact ?? '')) {
+      const base = cfg.publicUrl ?? 'https://bilhetemais.semfila.online';
+      const text = [`Olá ${o.buyer_name},`, '', `Os seus bilhetes para ${o.event} estão prontos.`, '', 'Abra o link à entrada (serve também de carteira):', '',
+        ...ts.rows.map((t: any, i: number) => `Bilhete ${i + 1}: ${base}/t/${tokenFor(t.id)}`), '', `Também os encontra em ${base}/account, em «Os meus bilhetes».`, 'Guarde este e-mail: quem tiver o link tem acesso ao bilhete e ao saldo.'].join('\n');
+      await queueMail(db, cfg.mailer ?? null, tx, { to: o.buyer_contact.toLowerCase(), subject: `Os seus bilhetes — ${o.event}`, text });
+    }
   };
   const orderTickets = async (tx: Tx, orderId: string) => {
     const r = await tx.query<any>(`SELECT id,format,status,ticket_type_id FROM tickets WHERE order_id=$1 ORDER BY created_at,id`, [orderId]);
@@ -534,7 +542,8 @@ export function createApp(db: Db, cfg: AppConfig) {
     if (!/^[0-9a-f-]{36}$/.test(req.params.id)) throw new HttpError(404, 'encomenda não encontrada');
     const o = await db.query<any>('SELECT id,status,total_minor FROM ticket_orders WHERE id=$1', [req.params.id]);
     if (!o.rows[0]) throw new HttpError(404, 'encomenda não encontrada');
-    return { ...o.rows[0], tickets: await orderTickets(db, req.params.id) };
+    const open = (await db.query<any>(`SELECT id FROM mpesa_charges WHERE kind='ORDER' AND ref_id=$1 AND status='PENDING'`, [req.params.id])).rows[0];
+    return { ...o.rows[0], tickets: await orderTickets(db, req.params.id), chargeId: open?.id ?? null }; // chargeId: pagamento M-Pesa em curso
   }));
   /** Envia por e-mail os links dos bilhetes de uma encomenda paga. Limitado para não servir de spam. */
   app.post('/public/orders/:id/email', h(async (req) => {

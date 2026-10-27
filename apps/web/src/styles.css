@@ -271,7 +271,7 @@ video.scan { width: 100%; max-height: 280px; border-radius: 14px; background: #0
 .pin { transition: opacity .2s; }
 
 .pin.hover { z-index: 2; } .pin.hover span { transform: scale(1.14); }
-.ev-card .go { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--brand-soft); color: var(--brand-text); transition: transform .15s; } .ev-card .go svg { width: 18px; height: 18px; transform: rotate(45deg); } .ev-card:hover .go { transform: translateX(3px); }
+.ev-card .go { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--brand-soft); color: var(--brand-text); transition: transform .15s; } .ev-card .go svg { width: 18px; height: 18px; transform: rotate(-45deg); } .ev-card:hover .go { transform: translateX(3px); }
 .ev-card:focus-visible { outline: 3px solid color-mix(in srgb, var(--brand) 55%, transparent); outline-offset: 2px; }
 
 /* voltar ao topo */

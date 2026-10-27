@@ -95,7 +95,7 @@ export function Home({ canRegister }: { canRegister: boolean }) {
         <div className="lp-wrap">
           <div className="lp-head">
             <div><span className="lp-label">BP/ Próximos eventos</span><h2>O que vem<br />a seguir</h2></div>
-            <div className="nav"><button className="lp-arrow" onClick={() => scroll(-1)} aria-label="Anterior" style={{ transform: 'scaleX(-1)' }}><Icon n="arrowup" /></button><button className="lp-arrow" onClick={() => scroll(1)} aria-label="Seguinte"><Icon n="arrowup" /></button></div>
+            <div className="nav"><button className="lp-arrow" onClick={() => scroll(-1)} aria-label="Anterior"><Icon n="arrowleft" /></button><button className="lp-arrow" onClick={() => scroll(1)} aria-label="Seguinte"><Icon n="arrowright" /></button></div>
           </div>
           {events === null ? <div className="lp-empty"><p>A carregar eventos…</p></div> : events.length === 0 ? (
             <div className="lp-empty"><h3>Ainda não há eventos publicados</h3><p className="lp-sub" style={{ margin: 0 }}>Assim que os organizadores publicarem, aparecem aqui e no mapa.</p><a className="lp-btn dark" href="/events">Abrir o mapa</a></div>
@@ -110,7 +110,7 @@ export function Home({ canRegister }: { canRegister: boolean }) {
               ))}
             </div>
           )}
-          <div className="lp-cta-row" style={{ marginTop: 28 }}><a className="lp-btn dark" href="/events">Ver todos no mapa<Icon n="arrowup" /></a></div>
+          <div className="lp-cta-row" style={{ marginTop: 28 }}><a className="lp-btn dark" href="/events">Ver todos no mapa<Icon n="arrowright" /></a></div>
         </div>
       </section>
 
@@ -122,7 +122,7 @@ export function Home({ canRegister }: { canRegister: boolean }) {
             {TILES.map((t) => (
               <article key={t.no} className={`tile cut ${t.k}${t.wide ? ' w' : ''}`}>
                 <span className="no">[{t.no}]</span>
-                <div className="foot"><div><h3>{t.t}</h3><p>{t.d}</p></div><span className="arrow"><Icon n="arrowup" /></span></div>
+                <div className="foot"><div><h3>{t.t}</h3><p>{t.d}</p></div><span className="arrow"><Icon n="arrowright" /></span></div>
               </article>
             ))}
           </div>
@@ -153,7 +153,7 @@ export function Home({ canRegister }: { canRegister: boolean }) {
         <div className="lp-wrap in">
           <span className="lp-label" style={{ color: '#fff' }}>BP/ Comece</span>
           <h2>Leve o seu evento para o digital.</h2>
-          <div className="lp-cta-row"><a className="lp-btn" href="/events">Explorar eventos<Icon n="arrowup" /></a><a className="lp-btn ghost" href="/staff">Entrada da equipa</a>{canRegister && <a className="lp-btn ghost" href="/register">Registar empresa</a>}</div>
+          <div className="lp-cta-row"><a className="lp-btn" href="/events">Explorar eventos<Icon n="arrowright" /></a><a className="lp-btn ghost" href="/staff">Entrada da equipa</a>{canRegister && <a className="lp-btn ghost" href="/register">Registar empresa</a>}</div>
         </div>
       </section>
 

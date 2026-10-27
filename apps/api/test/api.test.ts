@@ -664,6 +664,10 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     expect(mine[0]).toMatchObject({ id: o.body.orderId, status: 'PENDING_PAYMENT', tickets: [] });
     await webhook({ id: 'evt-acc-' + o.body.orderId, type: 'payment.succeeded', kind: 'ORDER', ref: o.body.orderId });
     mine = (await call('GET', '/account/orders', undefined, tok)).body;
+    // ao pagar, o e-mail com os bilhetes sai sozinho para o e-mail da conta
+    const auto = (await db.query<any>(`SELECT subject,body FROM notifications WHERE to_email='rita@teste.mz' AND subject LIKE 'Os seus bilhetes%'`)).rows;
+    expect(auto).toHaveLength(1);
+    expect(auto[0].body).toMatch(/\/t\/[\w-]{22}/);
     expect(mine[0].status).toBe('PAID');
     expect(mine[0].tickets[0].token).toHaveLength(22);
     const other = (await call('POST', '/account/register', { name: 'Outro', email: 'outro@teste.mz', password: 'pw-outro-12345' })).body.token;

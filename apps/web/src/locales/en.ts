@@ -69,6 +69,7 @@ export const EN: Record<string, string> = {
   'Valor em meticais': 'Amount in meticais', 'Pedir reembolso do saldo': 'Request a balance refund', 'Enviar pedido': 'Send request', 'Só é possível se o organizador do evento o permitir.': 'Only possible if the event organiser allows it.', 'Ainda sem movimentos.': 'No transactions yet.',
   'Mostre à porta para entrar e ao comerciante para pagar. O QR não contém o seu saldo.': 'Show it at the door to enter and to the merchant to pay. The QR does not contain your balance.',
   'QR de entrada e pagamento': 'Entry and payment QR', 'Código de barras do bilhete': 'Ticket barcode', 'QR da página do evento': 'Event page QR', 'Código do bilhete (se o QR não ler)': 'Ticket code (if the QR will not scan)', 'Copiar código': 'Copy code',
+  'Vai receber um pedido de PIN no telemóvel.': 'You will receive a PIN prompt on your phone.', 'O pagamento por M-Pesa não está disponível de momento.': 'M-Pesa payment is not available at the moment.',
   'Número M-Pesa (Vodacom)': 'M-Pesa number (Vodacom)', 'Pagamento seguro por M-Pesa': 'Secure payment by M-Pesa', 'A aguardar confirmação…': 'Waiting for confirmation…', 'Pagamento confirmado.': 'Payment confirmed.', 'O pagamento não foi concluído.': 'The payment was not completed.',
   'Verifique o telemóvel: vai receber um pedido do M-Pesa. Introduza o PIN para confirmar.': 'Check your phone: you will receive an M-Pesa prompt. Enter your PIN to confirm.',
   // ---------- conta do participante ----------
