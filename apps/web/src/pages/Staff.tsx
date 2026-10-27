@@ -11,7 +11,7 @@ import { Pos } from './Pos';
 
 interface OrgArea { name: string; slug: string; theme: Theme; logo: number | null }
 
-function Login({ onDone, org, canRegister }: { onDone: () => void; org?: OrgArea; canRegister?: boolean }) {
+function Login({ onDone, org, slug, canRegister, area }: { onDone: () => void; org?: OrgArea; slug?: string; canRegister?: boolean; area?: 'platform' }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
@@ -20,7 +20,7 @@ function Login({ onDone, org, canRegister }: { onDone: () => void; org?: OrgArea
   const toast = useToast();
   const { busy, run } = useAction(toast.show);
   const submit = () => run(async () => {
-    try { const r = await api('POST', '/auth/login', { email, password, org: org?.slug, code: code || undefined }); setToken(r.token); onDone(); }
+    try { const r = await api('POST', '/auth/login', { email, password, org: slug ?? org?.slug, area, code: code || undefined }); setToken(r.token); onDone(); }
     catch (e: any) { if (e.code === 'MFA_REQUIRED') { setNeedCode(true); return; } throw e; }
   });
   const logo = org?.logo ? `/public/org/${org.slug}/logo?v=${org.logo}` : null;
@@ -29,8 +29,9 @@ function Login({ onDone, org, canRegister }: { onDone: () => void; org?: OrgArea
       <aside className="brandpane">
         <a href="/">{org ? (logo ? <img src={logo} alt={org.name} style={{ height: 52, maxWidth: 220, objectFit: 'contain', background: '#fff', borderRadius: 12, padding: '6px 12px' }} /> : <b style={{ font: '800 1.5rem var(--font-display)' }}>{org.name}</b>) : <img src="/logo-white.svg" alt="Bilhete+" style={{ height: 40 }} />}</a>
         <div className="stack">
-          <h1>{org ? `Área da equipa de ${org.name}` : 'Eventos sem filas. Pagamentos sem dinheiro solto.'}</h1>
-          <p className="lead">{org ? 'Entre com a conta que a sua empresa lhe atribuiu para vender, cobrar e controlar acessos.' : 'Bilhetes, carteira digital, pulseiras e leitura de QR para o seu evento, com a sua marca.'}</p>
+          {area === 'platform' ? <span className="pp-tag plat">Bilhete+ · Plataforma</span> : org && <span className="pp-tag org">Empresa · Organizador</span>}
+          <h1>{area === 'platform' ? 'Administração Bilhete+' : org ? `Área da equipa de ${org.name}` : 'Eventos sem filas. Pagamentos sem dinheiro solto.'}</h1>
+          <p className="lead">{area === 'platform' ? 'Acesso reservado à equipa da Bilhete+: empresas, eventos e newsletter de toda a plataforma.' : org ? 'Entre com a conta que a sua empresa lhe atribuiu para vender, cobrar e controlar acessos.' : 'Bilhetes, carteira digital, pulseiras e leitura de QR para o seu evento, com a sua marca.'}</p>
         </div>
         <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 14 }}>
           {([['ticket', 'Bilhetes online e no balcão'], ['wallet', 'Carteira cashless e pulseiras NFC'], ['door', 'Portaria com validação instantânea']] as const).map(([ic, t]) => (
@@ -42,7 +43,7 @@ function Login({ onDone, org, canRegister }: { onDone: () => void; org?: OrgArea
         <LangSwitch className="login-lang" />
         <div className="stack" style={{ width: 'min(400px, 100%)' }}>
           <a href="/" className="mobile-only" style={{ marginBottom: 8 }}>{org ? <b style={{ font: '800 1.3rem var(--font-display)' }}>{org.name}</b> : <img src="/logo.svg" alt="Bilhete+" style={{ height: 36 }} />}</a>
-          <div><h1>Entrar</h1><p className="muted" style={{ marginTop: 6 }}>{org ? `Equipa de ${org.name}` : 'Acesso da equipa e dos organizadores.'}</p></div>
+          <div><h1>Entrar</h1><p className="muted" style={{ marginTop: 6 }}>{area === 'platform' ? 'Administração da plataforma Bilhete+' : org ? `Equipa de ${org.name}` : 'Acesso da equipa e dos organizadores.'}</p></div>
           <Field label="E-mail"><input type="email" value={email} autoComplete="username" autoFocus onChange={(e) => setEmail(e.target.value)} /></Field>
           <Field label="Palavra-passe"><div className="pw"><input type={show ? 'text' : 'password'} value={password} autoComplete="current-password" onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} /><button type="button" onClick={() => setShow(!show)} aria-label={show ? 'Esconder palavra-passe' : 'Mostrar palavra-passe'}>{show ? 'Esconder' : 'Mostrar'}</button></div></Field>
           {needCode && <Field label="Código de verificação" hint="6 dígitos da app de autenticação, ou um código de recuperação."><input value={code} autoFocus inputMode="numeric" autoComplete="one-time-code" onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} /></Field>}
@@ -67,7 +68,7 @@ function Onboarding({ me, reload }: { me: any; reload: () => void }) {
   );
 }
 
-export function Staff({ orgSlug, cfg }: { orgSlug?: string; cfg?: { selfRegistration: boolean } }) {
+export function Staff({ orgSlug, area, cfg }: { orgSlug?: string; area?: 'platform'; cfg?: { selfRegistration: boolean } }) {
   const [me, setMe] = useState<any>(undefined);
   const [org, setOrg] = useState<OrgArea | null | undefined>(orgSlug ? undefined : null);
   useEffect(() => { if (orgSlug) api('GET', `/public/org/${orgSlug}`).then(setOrg).catch(() => setOrg(null)); }, [orgSlug]);
@@ -76,13 +77,14 @@ export function Staff({ orgSlug, cfg }: { orgSlug?: string; cfg?: { selfRegistra
     api('GET', '/me').then((m) => {
       // quem não pertence a esta empresa nunca vê a área dela: termina a sessão e pede nova entrada
       if (orgSlug && (m.role === 'PLATFORM_ADMIN' || m.orgSlug !== orgSlug)) { setToken(null); return setMe(null); }
+      // a área da plataforma é só da equipa Bilhete+
+      if (area === 'platform' && m.role !== 'PLATFORM_ADMIN') { setToken(null); return setMe(null); }
       setMe(m);
     }).catch(() => setMe(null));
   };
-  useEffect(load, [orgSlug]);
+  useEffect(load, [orgSlug, area]);
   if (me === undefined || (orgSlug && org === undefined)) return <div className="main"><Skeleton /></div>;
-  if (orgSlug && org === null) return <div className="login"><main className="formpane" style={{ gridColumn: '1 / -1' }}><div className="stack center"><h1>Empresa não encontrada</h1><p className="muted">Confirme o endereço da área da sua empresa.</p><a className="btn" href="/staff">Ir para a entrada geral</a></div></main></div>;
-  if (!me) return <Login onDone={load} org={org ?? undefined} canRegister={cfg?.selfRegistration} />;
+  if (!me) return <Login onDone={load} org={org?.name ? org : undefined} slug={orgSlug} canRegister={cfg?.selfRegistration} area={area} />;
   if (me.role !== 'PLATFORM_ADMIN' && me.orgStatus !== 'ACTIVE') return <Onboarding me={me} reload={load} />;
   return (
     <>

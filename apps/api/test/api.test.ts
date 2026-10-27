@@ -385,7 +385,7 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     expect(new Set([...slugs, 'org-a']).size).toBe(slugs.length || 1); // sem repetidos
     const page = (await call('GET', `/public/org/${meA.orgSlug}`)).body;
     expect(page.name).toBe('Org A');
-    expect((await call('GET', '/public/org/nao-existe')).status).toBe(404);
+    expect((await call('GET', '/public/org/nao-existe')).body.name).toBeNull(); // resposta neutra: não revela que endereços existem
     // entrar pela área da própria empresa funciona; pela de outra empresa não (mesmo com credenciais certas)
     const login2 = (email: string, org?: string) => call('POST', '/auth/login', { email, password: 'pw123456', org });
     expect((await login2('adminA@org.test', 'org-a')).status).toBe(200);
@@ -807,6 +807,28 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     expect(acts).toEqual(expect.arrayContaining(['ticket.block', 'ticket.unblock', 'ticket.cancel']));
     // um cancelado pode ser visto pela conta de quem comprou como cancelado
     expect((await call('GET', `/public/tickets/${t1.token}`)).body.ticketStatus).toBe('REVOKED');
+  });
+
+  it('backoffices separados: a área /platform é só da Bilhete+ e cada empresa entra pela sua', async () => {
+    const asPlatform = (email: string) => call('POST', '/auth/login', { email, password: 'pw123456', area: 'platform' });
+    expect((await asPlatform('root@bilhete.test')).status).toBe(200);
+    expect((await asPlatform('adminA@org.test')).status).toBe(401); // um administrador de empresa não entra na plataforma
+    expect((await call('POST', '/auth/login', { email: 'root@bilhete.test', password: 'pw123456', org: 'org-a' })).status).toBe(401); // nem a plataforma na área de uma empresa
+  });
+
+  it('endereços das áreas privadas: sem enumeração, sem indexação e com travão de tentativas por e-mail', async () => {
+    // um endereço de empresa que não existe responde igual a um que existe (sem revelar quais existem)
+    const nope = await call('GET', '/public/org/nao-existe-xyz');
+    expect(nope.status).toBe(200);
+    expect(nope.body.name).toBeNull();
+    // tentativas falhadas seguidas bloqueiam a conta durante um tempo, mesmo vindas de IPs diferentes
+    const bad = () => call('POST', '/auth/login', { email: 'travao@teste.mz', password: 'errada-errada' }, undefined, { 'x-forwarded-for': '10.1.1.' + Math.floor(Math.random() * 200) });
+    for (let i = 0; i < 8; i++) expect((await bad()).status).toBe(401);
+    expect((await bad()).status).toBe(429);
+    expect((await call('POST', '/auth/login', { email: 'root@bilhete.test', password: 'pw123456' })).status).toBe(200); // outras contas não são afectadas
+    // as páginas de entrada não são indexáveis
+    const r = await fetch(base + '/platform');
+    expect(r.headers.get('x-robots-tag')).toBe('noindex, nofollow');
   });
 
   it('newsletter: subscrito por omissão, desligável no perfil e por ligação do e-mail; só a plataforma envia', async () => {

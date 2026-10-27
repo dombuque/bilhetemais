@@ -305,7 +305,7 @@ const STEPS = ['Empresa', 'Responsável', 'Confirmar'];
 
 /** O registo público está desligado: as empresas são criadas pela administração. */
 export function RegistrationClosed() {
-  return <Frame size="narrow"><div className="card stack center" style={{ padding: 36 }}><h1>Registo fechado</h1><p className="muted">As empresas são criadas pela equipa Bilhete+. Se já tem conta, entre na área da equipa.</p><a className="btn big wide" href="/staff">Entrada da equipa</a></div></Frame>;
+  return <Frame size="narrow"><div className="card stack center" style={{ padding: 36 }}><h1>Registo fechado</h1><p className="muted">O registo de empresas está fechado de momento. Contacte a equipa Bilhete+.</p><a className="btn big wide" href="/events">Ver eventos</a></div></Frame>;
 }
 
 /** Registo self-service em três passos (aprovação pela plataforma antes de criar eventos). */

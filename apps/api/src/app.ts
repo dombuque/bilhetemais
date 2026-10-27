@@ -89,6 +89,8 @@ export function createApp(db: Db, cfg: AppConfig) {
     });
     next();
   });
+  // as áreas de entrada (plataforma, empresas, contas) não devem aparecer em motores de busca
+  app.use(/^\/(platform|company|account|newsletter)(\/|$)/, (_req, res, next) => { res.setHeader('X-Robots-Tag', 'noindex, nofollow'); next(); });
   const hits = new Map<string, { n: number; reset: number }>();
   const limit = (max: number | undefined) => (req: Request, _res: Response, next: NextFunction) => {
     if (!max) return next();
@@ -142,11 +144,27 @@ export function createApp(db: Db, cfg: AppConfig) {
 
   // ---------- autenticação ----------
   /** `org` (opcional): área de entrada da empresa. `code`: código TOTP ou de recuperação, se a conta tiver MFA. */
+  // tentativas falhadas por e-mail: depois de 8 em 15 minutos, a conta fica em pausa (trava ataques por adivinhação, mesmo vindos de IPs diferentes)
+  const failedLogins = new Map<string, { n: number; reset: number }>();
   app.post('/auth/login', limit(cfg.loginRateLimit), h(async (req) => {
+    const loginKey = String(req.body?.email ?? '').trim().toLowerCase();
+    const fl = failedLogins.get(loginKey);
+    if (fl && fl.reset > Date.now() && fl.n >= 8) throw new HttpError(429, 'demasiadas tentativas, tente mais tarde');
+    try { return await loginHandler(req); } catch (e) {
+      if (e instanceof HttpError && e.status === 401 && e.message !== 'MFA_REQUIRED' && loginKey) { // pedir o código do segundo fator não é uma tentativa falhada
+        const cur = failedLogins.get(loginKey);
+        failedLogins.set(loginKey, !cur || cur.reset < Date.now() ? { n: 1, reset: Date.now() + 15 * 60_000 } : { n: cur.n + 1, reset: cur.reset });
+        if (failedLogins.size > 10_000) for (const [k, v] of failedLogins) if (v.reset < Date.now()) failedLogins.delete(k);
+      }
+      throw e;
+    }
+  }));
+  const loginHandler = async (req: Req) => {
     const org = typeof req.body.org === 'string' && req.body.org ? req.body.org : null;
     const r = await db.query<any>(`SELECT u.id,u.password_hash,u.role,o.slug,u.mfa_enabled,u.mfa_secret,u.mfa_last_step,u.mfa_recovery FROM users u LEFT JOIN organizations o ON o.id=u.organization_id WHERE u.email=$1 AND u.status='ACTIVE'`, [str(req.body.email, 'email').toLowerCase()]);
     const u = r.rows[0];
-    const fromOtherArea = !!u && !!org && (u.role === 'PLATFORM_ADMIN' || u.slug !== org);
+    // área da plataforma (/platform) só para a equipa Bilhete+; área de uma empresa só para essa empresa
+    const fromOtherArea = !!u && ((!!org && (u.role === 'PLATFORM_ADMIN' || u.slug !== org)) || (req.body.area === 'platform' && u.role !== 'PLATFORM_ADMIN'));
     if (!u || fromOtherArea || !checkPassword(String(req.body.password ?? ''), u.password_hash)) throw new HttpError(401, 'credenciais inválidas');
     if (u.mfa_enabled) {
       const code = String(req.body.code ?? '').trim();
@@ -163,7 +181,7 @@ export function createApp(db: Db, cfg: AppConfig) {
     const token = randomBytes(32).toString('base64url');
     await db.query(`INSERT INTO sessions VALUES($1,$2,now()+($3||' hours')::interval)`, [hashToken(token), u.id, String(SESSION_HOURS)]);
     return { token };
-  }));
+  };
 
   // ---------- MFA (TOTP) ----------
   app.post('/me/mfa/setup', authenticate, h(async (req) => {
@@ -1130,14 +1148,14 @@ export function createApp(db: Db, cfg: AppConfig) {
     if (b.acceptTerms !== true) throw new HttpError(400, 'é necessário aceitar os termos de utilização');
     return db.transaction(async (tx) => {
       const o = await tx.query<any>(
-        `INSERT INTO organizations(legal_name,trade_name,nuit,address,phone,contact_name,billing_email,website,slug) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+        `INSERT INTO organizations(legal_name,trade_name,nuit,address,phone,contact_name,billing_email,website,slug) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id,slug`,
         [str(b.legalName, 'denominação legal'), str(b.tradeName, 'nome comercial'), nuit, opt(b.address), opt(b.phone, 40), str(b.contactName, 'responsável'), opt(b.billingEmail) ?? email, opt(b.website), await uniqueOrgSlug(tx, String(b.tradeName ?? ''))]);
       await tx.query(`INSERT INTO users(organization_id,email,name,password_hash,role) VALUES($1,$2,$3,$4,'ORG_ADMIN')`,
         [o.rows[0].id, email, str(b.contactName, 'responsável'), hashPassword(password)]);
       await audit(tx, undefined, 'org.register', 'organization', o.rows[0].id, { nuit });
       await queueMail(db, cfg.mailer ?? null, tx, { to: email, organizationId: o.rows[0].id, subject: 'Recebemos o registo da sua empresa — Bilhete+',
         text: `Olá ${str(b.contactName, 'responsável')},\n\nRecebemos o registo de ${str(b.tradeName, 'nome comercial')}. A nossa equipa vai validar os dados e avisamos quando a empresa for aprovada. Entretanto pode entrar, completar o perfil e anexar documentos.\n\nBilhete+` });
-      return { id: o.rows[0].id, status: 'PENDING' };
+      return { id: o.rows[0].id, status: 'PENDING', slug: o.rows[0].slug };
     });
   }));
 
@@ -1361,7 +1379,7 @@ export function createApp(db: Db, cfg: AppConfig) {
   /** Dados públicos mínimos para a página de entrada da empresa (nome, marca). */
   app.get('/public/org/:slug', h(async (req) => {
     const r = await db.query<any>(`SELECT id,trade_name,slug,theme,status FROM organizations WHERE slug=$1 AND status<>'DISABLED'`, [req.params.slug]);
-    if (!r.rows[0]) throw new HttpError(404, 'empresa não encontrada');
+    if (!r.rows[0]) return { name: null, slug: null, theme: {}, logo: null }; // neutra: não revela se o endereço existe
     const a = await db.query<any>(`SELECT updated_at FROM brand_assets WHERE organization_id=$1 AND kind='logo'`, [r.rows[0].id]);
     return { name: r.rows[0].trade_name, slug: r.rows[0].slug, theme: r.rows[0].theme, logo: a.rows[0] ? +new Date(a.rows[0].updated_at) : null };
   }));

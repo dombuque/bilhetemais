@@ -97,12 +97,13 @@ export function LangSwitch({ className = '' }: { className?: string }) {
 export function Layout({ me, nav, view, onView, children }: { me: any; nav: NavItem[]; view: string; onView: (v: string) => void; children: ReactNode }) {
   const roleName: Record<string, string> = { PLATFORM_ADMIN: 'Administração', ORG_ADMIN: 'Organizador', CASHIER: 'Balcão', MERCHANT_OPERATOR: 'Comerciante', GATE_OPERATOR: 'Acessos' };
   const [account, setAccount] = useState(false);
-  const logout = () => { setToken(null); location.assign(me.orgSlug ? `/company/${me.orgSlug}` : '/staff'); };
+  const logout = () => { setToken(null); location.assign(me.orgSlug ? `/company/${me.orgSlug}` : '/platform'); };
   return (
     <div className="shell">
       <header className="topbar"><img src="/logo-dark.svg" alt="Bilhete+" /><LangSwitch /><button className="ghost sm" onClick={() => setAccount(true)} aria-label="A minha conta" style={{ marginLeft: 'auto', marginRight: 8 }}>{me.name.split(' ')[0]}</button></header>
       <nav className="side" aria-label="Navegação">
-        <div className="brand"><img src="/logo-dark.svg" alt="Bilhete+" /></div>
+        <div className="brand"><img src="/logo-dark.svg" alt="Bilhete+" />
+          {me.role === 'PLATFORM_ADMIN' ? <span className="area-tag plat">Bilhete+ · Plataforma</span> : <span className="area-tag org">Empresa · {me.orgName ?? me.merchantName ?? ''}</span>}</div>
         {nav.map((n) => <button key={n.id} className={'navbtn' + (n.id === view ? ' on' : '')} aria-current={n.id === view ? 'page' : undefined} onClick={() => onView(n.id)}><Icon n={n.icon} />{n.label}</button>)}
         <button className="navbtn" onClick={logout} style={{ display: 'none' }}><Icon n="logout" />Sair</button>
         <div className="who">

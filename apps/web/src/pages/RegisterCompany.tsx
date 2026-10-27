@@ -9,7 +9,7 @@ const STEPS = ['Empresa', 'Responsável', 'Confirmar'];
 function Shell({ label, title, children }: { label: string; title: string; children: React.ReactNode }) {
   return (
     <div className="pp">
-      <header className="pp-top"><a href="/" aria-label="Início"><img src="/logo-dark.svg" alt="Bilhete+" /></a><span className="pp-top-r"><LangSwitch className="on-dark" /><a href="/staff">Entrar</a></span></header>
+      <header className="pp-top"><a href="/" aria-label="Início"><img src="/logo-dark.svg" alt="Bilhete+" /></a><span className="pp-top-r"><LangSwitch className="on-dark" /><a href="/events">Ver eventos</a></span></header>
       <section className="pp-hero"><span className="pp-label">{label}</span><h1>{title}</h1></section>
       <main className="pp-main">{children}</main>
     </div>
@@ -21,7 +21,7 @@ export function Register() {
   const [f, setF] = useState({ legalName: '', tradeName: '', nuit: '', address: '', phone: '', contactName: '', email: '', password: '', acceptTerms: false });
   const [step, setStep] = useState(0);
   const [show, setShow] = useState(false);
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState<string | null>(null); // endereço da área da empresa (só mostrado a quem se registou)
   const toast = useToast();
   const { busy, run } = useAction(toast.show);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
@@ -29,11 +29,13 @@ export function Register() {
   const ok1 = !!f.contactName.trim() && /\S+@\S+\.\S+/.test(f.email) && f.password.length >= 8;
   const ready = ok0 && ok1 && f.acceptTerms;
 
-  if (done) return (
+  if (done !== null) return (
     <Shell label="[BP/ Registo recebido]" title="Falta pouco.">
       <section className="pp-card">
         <p className="pp-sub">A sua empresa está <b>a aguardar aprovação</b>. Entretanto pode entrar, completar o perfil, anexar documentos e escolher a marca. Só depois da aprovação poderá criar eventos.</p>
-        <a className="pp-btn" href="/staff">Entrar</a>
+        <p className="pp-sub">Este é o endereço da área da sua empresa. <b>Guarde-o</b>: não é divulgado em lado nenhum.</p>
+        <p className="mono" style={{ overflowWrap: 'anywhere' }} data-no-translate>{location.origin}/company/{done}</p>
+        <a className="pp-btn" href={`/company/${done}`}>Entrar na minha empresa</a>
       </section>
     </Shell>
   );
@@ -74,9 +76,8 @@ export function Register() {
           </dl>
           <label className="pp-check"><input type="checkbox" checked={f.acceptTerms} onChange={set('acceptTerms')} /><span>Declaro que os dados são verdadeiros e aceito os termos de utilização da plataforma.</span></label>
           <div className="pp-actions"><button className="pp-btn alt" onClick={() => setStep(1)}>Voltar</button>
-            <button className="pp-btn" disabled={busy || !ready} onClick={() => run(async () => { await api('POST', '/public/register', f); setDone(true); })}>{busy ? 'A enviar…' : 'Registar empresa'}</button></div>
+            <button className="pp-btn" disabled={busy || !ready} onClick={() => run(async () => { const r = await api('POST', '/public/register', f); setDone(r.slug || ''); })}>{busy ? 'A enviar…' : 'Registar empresa'}</button></div>
         </div>}
-        <p className="pp-sub center">Já tem conta? <a href="/staff">Entrar</a></p>
       </section>
       {toast.node}
     </Shell>

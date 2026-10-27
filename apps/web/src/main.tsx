@@ -47,8 +47,9 @@ function App() {
   if (path === '/logo-options') return <Suspense fallback={null}><LogoOptions /></Suspense>;
   if (path === '/events') return <Suspense fallback={null}><Discover /></Suspense>;
   if (path === '/register') return cfg.selfRegistration ? <Register /> : <RegistrationClosed />;
-  if ((m = /^\/empresa\/([a-z0-9-]+)\/?$/.exec(path))) return <Staff orgSlug={m[1]} cfg={cfg} />;
-  if (path.startsWith('/staff')) return <Staff cfg={cfg} />;
+  if ((m = /^\/company\/([a-z0-9-]+)\/?$/.exec(path))) return <Staff orgSlug={m[1]} cfg={cfg} />;
+  if (path === '/platform' || path === '/platform/') return <Staff area="platform" cfg={cfg} />;
+  if (path.startsWith('/staff')) { location.replace('/'); return null; } // endereço antigo: já não é divulgado
   if (sub && path === '/') return <PublicEvent slug={sub} cfg={cfg} />;
   return <Home canRegister={cfg.selfRegistration} />;
 }

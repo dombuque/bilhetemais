@@ -161,7 +161,7 @@ export function Home({ canRegister }: { canRegister: boolean }) {
 
       <footer className="lp-foot">
         <div className="lp-wrap">
-          <div className="row"><span>© Bilhete+ · Moçambique</span><span><a href="/events">Eventos</a> · <a href="/staff">Equipa</a></span></div>
+          <div className="row"><span>© Bilhete+ · Moçambique</span><span><a href="/events">Eventos</a></span></div>
           <div className="giant" aria-hidden="true">Bilhete+</div>
         </div>
       </footer>
