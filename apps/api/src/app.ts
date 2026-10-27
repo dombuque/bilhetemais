@@ -99,6 +99,11 @@ export function createApp(db: Db, cfg: AppConfig) {
     next();
   };
 
+  // /events é, ao mesmo tempo, a lista de eventos da equipa (API, com sessão) e a página pública de descoberta:
+  // quem abre o endereço no navegador (Accept: text/html) recebe a página; a aplicação pede o JSON com fetch
+  if (cfg.webDir && existsSync(join(cfg.webDir, 'index.html'))) {
+    app.get('/events', (req, res, next) => (/text\/html/.test(req.headers.accept ?? '') ? (res.setHeader('Cache-Control', 'no-cache'), res.sendFile(join(cfg.webDir!, 'index.html'))) : next()));
+  }
   app.use('/public', (req, res, next) => (req.method === 'POST' ? limit(cfg.publicRateLimit)(req, res, next) : next()));
   const h = (fn: (req: Req, res: Response) => Promise<unknown>) => (req: Request<any>, res: Response, next: NextFunction) =>
     fn(req as Req, res).then((r) => { if (r !== undefined && !res.headersSent) res.json(out(r)); }).catch(next);
