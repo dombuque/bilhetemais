@@ -155,7 +155,7 @@ export function Home({ canRegister }: { canRegister: boolean }) {
         <div className="lp-wrap in">
           <span className="lp-label" style={{ color: '#fff' }}>BP/ Comece</span>
           <h2>Leve o seu evento para o digital.</h2>
-          <div className="lp-cta-row"><a className="lp-btn" href="/events">Explorar eventos<Icon n="arrowright" /></a><a className="lp-btn ghost" href="/staff">Entrada da equipa</a>{canRegister && <a className="lp-btn ghost" href="/register">Registar empresa</a>}</div>
+          <div className="lp-cta-row"><a className="lp-btn" href="/events">Explorar eventos<Icon n="arrowright" /></a>{canRegister && <a className="lp-btn ghost" href="/register">Registar empresa</a>}</div>
         </div>
       </section>
 

@@ -45,7 +45,7 @@ export async function api<T = any>(method: string, path: string, body?: unknown)
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) {
-    if (r.status === 401 && token) { setToken(null); location.assign('/staff'); }
+    if (r.status === 401 && token) { setToken(null); location.reload(); /* volta à entrada da mesma área (plataforma ou empresa) */ }
     throw new ApiError(r.status, MESSAGES[data.error] ?? data.error ?? 'Erro de rede', data.error);
   }
   return data as T;
