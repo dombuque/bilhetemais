@@ -16,6 +16,15 @@ export const EN_ADMIN: Record<string, string> = {
   'Bilhete+ no seu telemóvel': 'Bilhete+ on your phone', 'Eventos e bilhetes sempre à mão, em ecrã inteiro.': 'Events and tickets always at hand, full screen.',
   'No Safari: toque em Partilhar ⬆️ e depois em «Adicionar ao ecrã principal».': 'In Safari: tap Share ⬆️, then “Add to Home Screen”.',
   'Notificações': 'Notifications', 'Bloqueadas nas definições do aparelho': 'Blocked in the device settings', 'Novos eventos e bilhetes confirmados': 'New events and confirmed tickets', 'Notificações ativadas': 'Notifications enabled', 'Notificações desativadas': 'Notifications disabled', 'Não foi possível ativar as notificações.': 'Could not enable notifications.',
+  // ---------- revisão do backoffice em inglês ----------
+  'fundos dos participantes': "attendees' funds", '0 = grátis': '0 = free', 'já pago': 'already paid', 'até': 'until', '% dos': '% of', 'bilhetes emitidos': 'tickets issued',
+  'Valor devido = vendas − devoluções − comissão. Os saldos dos participantes não são receita do organizador.': 'Amount due = sales − refunds − commission. Attendee balances are not organiser revenue.',
+  'neste evento (altere em Parâmetros).': 'in this event (change under Settings).', 'Cole a ligação do Google Maps (https://…).': 'Paste the Google Maps link (https://…).', 'sem limite': 'no limit', 'Nenhum (parâmetros próprios)': 'None (own settings)',
+  '«Bilhete único» para eventos sem distinção (sem VIP, geral, etc.).': '“Single ticket” for events without distinctions (no VIP, general, etc.).', 'Percentagem retida pelo organizador. Cada comerciante pode ter a sua (aba Acertos).': 'Percentage withheld by the organiser. Each merchant can have its own (Settlements tab).',
+  'Não': 'No', 'Sim': 'Yes', 'Saldo máximo e limites aplicam-se a novos carregamentos. Valores actuais: mínimo': 'Maximum balance and limits apply to new top-ups. Current values: minimum',
+  'Este evento pode herdar parâmetros e aparência de outro evento da empresa. O que definir aqui substitui o herdado; o resto acompanha o evento original.': 'This event can inherit settings and appearance from another company event. Whatever you set here overrides the inherited value; the rest follows the original event.',
+  'Logótipo': 'Logo', 'Moderna (padrão)': 'Modern (default)', 'Clássica (serifada)': 'Classic (serif)', 'Técnica': 'Technical', 'Gradiente (padrão)': 'Gradient (default)', 'E-mail de facturação': 'Billing email', 'definido': 'set',
+  'Ex.: Dois dias de música e cultura': 'E.g. Two days of music and culture', 'Pagamentos': 'Payments', 'Saldo em circulação': 'Balance in circulation',
   // ---------- estados ----------
   'Activa': 'Active', 'Publicado': 'Published', 'Pago': 'Paid', 'Confirmado': 'Confirmed', 'Pendente': 'Pending', 'A aguardar pagamento': 'Awaiting payment', 'Utilizado': 'Used', 'Suspensa': 'Suspended', 'Desactivada': 'Disabled', 'Cancelado': 'Cancelled', 'Bloqueado': 'Blocked', 'Encerrado': 'Closed',
   'Titular': 'Holder', 'Estado': 'Status',
@@ -44,7 +53,7 @@ export const EN_ADMIN: Record<string, string> = {
   'Reaproveite bilhetes, portas e comerciantes, e herde parâmetros e aparência.': 'Reuse tickets, gates and merchants, and inherit settings and appearance.', 'Evento criado': 'Event created', 'Evento publicado': 'Event published', 'Publicar': 'Publish', 'Rascunho': 'Draft',
   'Sem eventos activos na sua empresa.': 'No active events in your company.', 'Sem eventos activos.': 'No active events.', 'Ver página pública': 'View public page', 'Imprimir cartaz': 'Print poster', 'Cartaz com QR': 'Poster with QR',
   'Bilhetes vendidos': 'Tickets sold', 'Bilhetes emitidos': 'Tickets issued', 'Entradas validadas': 'Entries validated', 'Encomendas pagas': 'Paid orders', 'Receita de bilhética': 'Ticket revenue', 'Vendas líquidas': 'Net sales', 'Líquido': 'Net',
-  'Carregamentos de carteiras': 'Wallet top-ups', 'Saldo por gastar': 'Unspent balance', 'Saldo em circulação': 'Balance in circulation', 'Numerário nos balcões': 'Cash at the counters', 'Reconciliação': 'Reconciliation', 'Carregamentos no ledger': 'Top-ups in the ledger', 'Digitais confirmados': 'Confirmed digital',
+  'Carregamentos de carteiras': 'Wallet top-ups', 'Saldo por gastar': 'Unspent balance', 'Numerário nos balcões': 'Cash at the counters', 'Reconciliação': 'Reconciliation', 'Carregamentos no ledger': 'Top-ups in the ledger', 'Digitais confirmados': 'Confirmed digital',
   'Carregamentos e saldos não são receita do organizador: são fundos dos participantes.': "Top-ups and balances are not the organiser's revenue: they are attendees' funds.", 'Diferença': 'Difference', 'Por tipo de bilhete': 'By ticket type', 'Por comerciante': 'By merchant', 'Vendas por comerciante': 'Sales by merchant',
   // ---------- bilhetes ----------
   'Novo bilhete': 'New ticket', 'Novo tipo de bilhete': 'New ticket type', 'Bilhete único': 'Single ticket', 'Várias categorias': 'Several categories', 'Categorias de bilhete': 'Ticket categories', 'Ainda sem bilhetes. Adicione o primeiro abaixo.': 'No tickets yet. Add the first one below.',
@@ -96,6 +105,7 @@ export const EN_ADMIN: Record<string, string> = {
 
 /** Frases do backoffice com números ou nomes. */
 export const EN_ADMIN_PATTERNS: [RegExp, string][] = [
+  [/^Local: (.+)\. Arraste o pin ou toque noutro ponto\.$/, 'Location: $1. Drag the pin or tap another spot.'],
   [/^(\d+) empresas?$/, '$1 compan(ies)'], [/^(\d+) a aguardar aprovação$/, '$1 awaiting approval'], [/^Eventos \((\d+)\)$/, 'Events ($1)'], [/^Equipa \((\d+)\)$/, 'Team ($1)'], [/^Documentos \((\d+)\)$/, 'Documents ($1)'],
   [/^(\d+) subscritor(es)?$/, '$1 subscriber(s)'], [/^Enviar a (\d+) subscritor(es)?$/, 'Send to $1 subscriber(s)'], [/^Newsletter enviada a (\d+)\.$/, 'Newsletter sent to $1.'], [/^(\d+) destinatários$/, '$1 recipients'],
   [/^(\d+) evento(s)? em todas as empresas$/, '$1 event(s) across all companies'], [/^(\d+) bilhetes? · (.+)$/, '$1 ticket(s) · $2'], [/^até (.+)$/, 'until $1'], [/^Ver rendimento de (.+)$/, 'View earnings of $1'],
