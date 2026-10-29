@@ -150,3 +150,5 @@
 .lp-marquee { min-height: 56px; display: flex; align-items: center; } .lp-marquee .lp-track { align-items: center; } .lp-marquee span { line-height: 1.25; flex: none; white-space: nowrap; }
 @media (min-width: 960px) { .lp-marquee { min-height: 72px; } }
 .lp-nav .go .inst-nav { display: none; } @media (min-width: 960px) { .lp-nav .go .inst-nav { display: inline-flex; } }
+/* o seletor de língua tem de ver-se também no telemóvel (a regra dos botões «ghost» do menu escondia-o) */
+.lp-nav .go .langsw { display: inline-flex; } .lp-nav .go .langsw button.ghost { display: inline-flex !important; }

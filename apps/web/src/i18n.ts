@@ -7,10 +7,10 @@ const EN_PATTERNS = [...P_PUBLIC, ...EN_ADMIN_PATTERNS];
 export type Lang = 'pt' | 'en';
 const KEY = 'bp_lang';
 
-/** Língua escolhida pela pessoa; se nunca escolheu, a do navegador (português ou inglês). */
+/** Língua escolhida pela pessoa; se nunca escolheu, português. */
 export function getLang(): Lang {
   try { const v = localStorage.getItem(KEY); if (v === 'pt' || v === 'en') return v; } catch { /* sem armazenamento */ }
-  return (navigator.language || 'pt').toLowerCase().startsWith('pt') ? 'pt' : 'en';
+  return 'pt'; // português por omissão, seja qual for a língua do navegador; a pessoa troca com o botão PT | EN
 }
 /** Guarda a escolha e recarrega: a página volta já na nova língua. */
 export function setLang(l: Lang) {
