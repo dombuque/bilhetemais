@@ -3,6 +3,7 @@ import { accountApi, accountToken, dt, mainUrl, mt, onEventHost, setAccountToken
 import { Empty, Icon, LangSwitch, Pill, Skeleton, useAction, useToast } from '../ui';
 import { AppTabs } from '../AppTabs';
 import { InstallButton, isStandalone, useInstall } from '../install';
+import { disablePush, enablePush, pushActive, pushPermission, pushSupported } from '../push';
 import './participant.css';
 
 export interface Me { name: string; email: string | null; phone: string | null; hasPassword?: boolean; newsletter?: boolean }
@@ -159,6 +160,8 @@ export function AccountPage({ view = 'tickets' }: { view?: 'tickets' | 'profile'
   const load = useCallback(() => accountApi('GET', '/account/orders').then(setOrders).catch(() => setOrders([])), []);
   useEffect(() => { if (me) { if (view === 'tickets') load(); setProf({ name: me.name, phone: me.phone ?? '' }); } }, [me, load, view]);
   const inst = useInstall();
+  const [pushOn, setPushOn] = useState(false);
+  useEffect(() => { if (pushSupported()) pushActive().then(setPushOn); }, []);
   const toggle = (k: string) => setOpen(open === k ? null : k);
   const method = me ? (me.email && me.hasPassword === false ? 'Google' : me.email ? 'E-mail' : 'Telemóvel') : '';
 
@@ -208,6 +211,8 @@ export function AccountPage({ view = 'tickets' }: { view?: 'tickets' | 'profile'
               <label className="pp-check"><input type="checkbox" checked={me.newsletter !== false} disabled={busy} onChange={(e) => run(async () => { await accountApi('PATCH', '/account/me', { newsletter: e.target.checked }); refresh(); }, e.target.checked ? 'Newsletter ativada' : 'Newsletter desativada')} /><span>Receber novidades e eventos por e-mail.</span></label>
               <p className="pp-sub">Os e-mails das suas compras (bilhetes e pagamentos) continuam a chegar sempre.</p>
             </Row>}
+            {pushSupported() && <section className="pp-row-item"><div className="pp-row-head static"><span className="pp-row-ic"><Icon n="bell" /></span><span className="pp-row-tx"><b>Notificações</b><small>{pushPermission() === 'denied' ? 'Bloqueadas nas definições do aparelho' : 'Novos eventos e bilhetes confirmados'}</small></span>
+              <label className="pp-switch"><input type="checkbox" checked={pushOn} disabled={busy || pushPermission() === 'denied'} onChange={(e) => run(async () => { if (e.target.checked) { const ok = await enablePush(); setPushOn(ok); if (!ok) throw new Error('Não foi possível ativar as notificações.'); } else { await disablePush(); setPushOn(false); } }, e.target.checked ? 'Notificações ativadas' : 'Notificações desativadas')} /><span /></label></div></section>}
             <section className="pp-row-item"><div className="pp-row-head static"><span className="pp-row-ic"><Icon n="globe" /></span><span className="pp-row-tx"><b>Idioma</b></span><LangSwitch /></div></section>
             {inst.canPrompt && !inst.installed && <section className="pp-row-item"><div className="pp-row-head static"><span className="pp-row-ic"><Icon n="arrowdown" /></span><span className="pp-row-tx"><b>App no telemóvel</b><small>Instale o Bilhete+ no ecrã principal</small></span><InstallButton label="Instalar" className="pp-link" /></div></section>}
             <Row icon="trash" title="Apagar conta" hint="Remove os seus dados pessoais" open={open === 'del'} onToggle={() => toggle('del')} danger>

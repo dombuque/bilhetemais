@@ -7,6 +7,7 @@ import { queueMail, type Mailer } from './mailer';
 import { normalizeMsisdn, type Mpesa } from './mpesa';
 import { authorizeUrl, exchangeCode, type GoogleConfig } from './google';
 import { normalizePhone, type Sms } from './sms';
+import type { Push } from './push';
 import { hashRecovery, newRecoveryCodes, newSecret, openSecret, otpauthUrl, sealSecret, verifyTotp } from './totp';
 
 export class HttpError extends Error {
@@ -43,6 +44,10 @@ export interface AppConfig {
   mpesa?: Mpesa | null;
   /** Entrada com Google (opcional). */
   google?: GoogleConfig | null;
+  /** Notificações push (opcional; precisa de chaves VAPID). */
+  push?: Push | null;
+  /** Intervalo (ms) da verificação dos lembretes de eventos. */
+  pushReminderMs?: number;
   /** Envio de SMS (códigos de confirmação do telemóvel). Sem ele, a entrada por telemóvel fica indisponível. */
   sms?: Sms | null;
   /** Intervalo (ms) da verificação das cobranças M-Pesa por confirmar. */
@@ -339,9 +344,67 @@ export function createApp(db: Db, cfg: AppConfig) {
       return { id: e.rows[0].id, subdomain: sub };
     });
   }));
+  // ---------- notificações push ----------
+  const pushUrl = (path: string) => `${(cfg.publicUrl ?? 'https://bilhetemais.live').replace(/\/$/, '')}${path}`;
+  const eventAddress = (sub: string | null | undefined) => (sub ? (cfg.baseDomain ? `https://${sub}.${cfg.baseDomain}` : pushUrl('/e/' + sub)) : pushUrl('/events'));
+  /** Envia a todas as subscrições dadas; as que já não existem (404/410) são apagadas. Nunca rebenta o pedido que a originou. */
+  const sendPush = async (subs: { endpoint: string; p256dh: string; auth: string }[], msg: { title: string; body: string; url: string; tag?: string }) => {
+    if (!cfg.push) return 0;
+    let ok = 0;
+    for (const s of subs) {
+      try { await cfg.push.send(s, msg); ok++; }
+      catch (e: any) { if (e?.statusCode === 404 || e?.statusCode === 410) await db.query('DELETE FROM push_subscriptions WHERE endpoint=$1', [s.endpoint]).catch(() => {}); else console.error('push', e?.statusCode ?? e?.message); }
+    }
+    return ok;
+  };
+  const pushAsync = (fn: () => Promise<unknown>) => { if (!cfg.push) return; const p = fn().catch((e) => console.error('push', e)).finally(() => inflight.delete(p)); inflight.add(p); };
+  app.get('/public/push/config', h(async () => ({ publicKey: cfg.push?.publicKey ?? null })));
+  /** Regista (ou actualiza) a subscrição deste aparelho; se houver sessão de conta, fica ligada a ela. */
+  app.post('/public/push/subscribe', h(async (req) => {
+    if (!cfg.push) throw new HttpError(409, 'as notificações não estão disponíveis');
+    const sub = req.body?.subscription, k = sub?.keys;
+    if (typeof sub?.endpoint !== 'string' || !/^https:\/\/.{10,900}$/.test(sub.endpoint) || typeof k?.p256dh !== 'string' || typeof k?.auth !== 'string' || k.p256dh.length > 200 || k.auth.length > 100) throw new HttpError(400, 'subscrição inválida');
+    const topics = (Array.isArray(req.body?.topics) ? req.body.topics : ['events', 'tickets']).filter((t: unknown) => t === 'events' || t === 'tickets');
+    let accountId: string | null = null;
+    const bearerTok = bearer(req as Request);
+    if (bearerTok) { try { accountId = (await needAccount(req as Request)).id; } catch { /* sem sessão: fica anónima */ } }
+    await db.query(`INSERT INTO push_subscriptions(account_id,endpoint,p256dh,auth,topics) VALUES($1,$2,$3,$4,$5)
+      ON CONFLICT (endpoint) DO UPDATE SET account_id=COALESCE(EXCLUDED.account_id, push_subscriptions.account_id), p256dh=EXCLUDED.p256dh, auth=EXCLUDED.auth, topics=EXCLUDED.topics`, [accountId, sub.endpoint, k.p256dh, k.auth, topics]);
+    return { ok: true, topics };
+  }));
+  app.post('/public/push/unsubscribe', h(async (req) => {
+    const endpoint = String(req.body?.endpoint ?? '');
+    if (endpoint) await db.query('DELETE FROM push_subscriptions WHERE endpoint=$1', [endpoint]);
+    return { ok: true };
+  }));
+  /** Lembrete 24 h antes: quem tem bilhete para um evento que começa dentro de ~24 h recebe um aviso (uma só vez). */
+  const runPushReminders = async () => {
+    if (!cfg.push) return 0;
+    const rows = (await db.query<any>(`SELECT DISTINCT o.account_id, e.id AS event_id, e.name, e.starts_at, e.location, d.subdomain
+        FROM ticket_orders o JOIN tickets t ON t.order_id=o.id AND t.status IN ('ISSUED','USED') JOIN events e ON e.id=o.event_id LEFT JOIN event_domains d ON d.event_id=e.id
+       WHERE o.account_id IS NOT NULL AND e.status='PUBLISHED' AND e.starts_at > now() AND e.starts_at <= now() + interval '24 hours'
+         AND NOT EXISTS (SELECT 1 FROM push_sent s WHERE s.account_id=o.account_id AND s.event_id=e.id AND s.kind='reminder24h')`)).rows;
+    let n = 0;
+    for (const r of rows) {
+      await db.query(`INSERT INTO push_sent(account_id,event_id,kind) VALUES($1,$2,'reminder24h') ON CONFLICT DO NOTHING`, [r.account_id, r.event_id]);
+      const subs = (await db.query<any>(`SELECT endpoint,p256dh,auth FROM push_subscriptions WHERE account_id=$1 AND 'tickets' = ANY(topics)`, [r.account_id])).rows;
+      n += await sendPush(subs, { title: 'O seu evento é amanhã', body: `${r.name}${r.location ? ' · ' + r.location : ''}. Tenha o bilhete à mão.`, url: pushUrl('/account'), tag: 'reminder-' + r.event_id });
+    }
+    return n;
+  };
+  (app as any).runPushReminders = runPushReminders;
+  if (cfg.push && cfg.pushReminderMs) setInterval(() => runPushReminders().catch((e) => console.error('lembretes', e)), cfg.pushReminderMs).unref();
+
   app.post('/events/:id/publish', ...staff('ORG_ADMIN'), h(async (req) => {
     await eventFor(req.user!, req.params.id);
+    const was = (await db.query<any>('SELECT status FROM events WHERE id=$1', [req.params.id])).rows[0]?.status;
     await db.query(`UPDATE events SET status='PUBLISHED' WHERE id=$1`, [req.params.id]);
+    // só na primeira publicação: «há um novo evento» para quem activou as notificações
+    if (was !== 'PUBLISHED') pushAsync(async () => {
+      const ev = (await db.query<any>(`SELECT e.name,e.starts_at,e.location,d.subdomain FROM events e LEFT JOIN event_domains d ON d.event_id=e.id WHERE e.id=$1`, [req.params.id])).rows[0];
+      const subs = (await db.query<any>(`SELECT endpoint,p256dh,auth FROM push_subscriptions WHERE 'events' = ANY(topics)`)).rows;
+      await sendPush(subs, { title: 'Novo evento no Bilhete+', body: `${ev.name}${ev.location ? ' · ' + ev.location : ''} · ${new Date(ev.starts_at).toLocaleDateString('pt-MZ', { day: 'numeric', month: 'long' })}`, url: eventAddress(ev.subdomain), tag: 'event-' + req.params.id });
+    });
     return { status: 'PUBLISHED' };
   }));
   app.post('/events/:id/ticket-types', ...staff('ORG_ADMIN'), h(async (req) => {
@@ -411,7 +474,8 @@ export function createApp(db: Db, cfg: AppConfig) {
       await tx.query(`UPDATE tickets SET status='ISSUED', wallet_id=$2 WHERE id=$1`, [t.id, w]);
     }
     // e-mail automático com os bilhetes (para compras com conta; compras de balcão têm telefone, não e-mail)
-    const o = (await tx.query<any>('SELECT o.buyer_name,o.buyer_contact,o.channel,e.name AS event FROM ticket_orders o JOIN events e ON e.id=o.event_id WHERE o.id=$1', [orderId])).rows[0];
+    const o = (await tx.query<any>('SELECT o.buyer_name,o.buyer_contact,o.channel,o.account_id,e.name AS event FROM ticket_orders o JOIN events e ON e.id=o.event_id WHERE o.id=$1', [orderId])).rows[0];
+    if (ts.rows.length && o?.account_id) pushAsync(async () => { await new Promise((r) => setTimeout(r, 300)); const subs = (await db.query<any>(`SELECT endpoint,p256dh,auth FROM push_subscriptions WHERE account_id=$1 AND 'tickets' = ANY(topics)`, [o.account_id])).rows; await sendPush(subs, { title: 'Bilhetes confirmados', body: `${o.event}: os seus bilhetes já estão na app.`, url: pushUrl('/account'), tag: 'order-' + orderId }); });
     if (ts.rows.length && o?.channel === 'ONLINE' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(o.buyer_contact ?? '')) {
       const base = cfg.publicUrl ?? 'https://bilhetemais.live';
       const text = [`Olá ${o.buyer_name},`, '', `Os seus bilhetes para ${o.event} estão prontos.`, '', 'Abra o link à entrada (serve também de carteira):', '',
@@ -1075,7 +1139,7 @@ export function createApp(db: Db, cfg: AppConfig) {
   }));
 
   // ---------- leitura para a interface ----------
-  app.get('/public/config', h(async () => ({ baseDomain: cfg.baseDomain ?? null, publicUrl: cfg.publicUrl ?? null, simulator: !!cfg.simulator, selfRegistration: !!cfg.selfRegistration, mpesa: !!cfg.mpesa, google: !!cfg.google, phone: !!cfg.sms })));
+  app.get('/public/config', h(async () => ({ baseDomain: cfg.baseDomain ?? null, publicUrl: cfg.publicUrl ?? null, simulator: !!cfg.simulator, selfRegistration: !!cfg.selfRegistration, mpesa: !!cfg.mpesa, google: !!cfg.google, phone: !!cfg.sms, push: !!cfg.push })));
   /** Só sandbox: equivale a um webhook de sucesso do prestador. */
   app.post('/public/simulate-payment', h(async (req) => {
     if (!cfg.simulator) throw new HttpError(404, 'indisponível');

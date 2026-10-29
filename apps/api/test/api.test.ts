@@ -42,7 +42,8 @@ const S: Record<string, any> = {};
 const geoCalls: string[] = [];
 // M-Pesa simulado: as respostas são controladas pelo teste
 const googleStub: Record<string, any> = {};
-const smsSent: { to: string; text: string }[] = []; // SMS simulado: guarda o que seria enviado
+const smsSent: { to: string; text: string }[] = [];
+const pushSent: { endpoint: string; msg: any }[] = []; // notificações simuladas // SMS simulado: guarda o que seria enviado
 const mpesaStub: any = { next: [] as any[], calls: [] as any[], query: { outcome: 'PENDING', code: 'INS-0', message: 'por confirmar' } };
 let appInst: any;
 
@@ -55,6 +56,7 @@ beforeAll(async () => {
     publicUrl: 'https://bilhete.test',
     baseDomain: 'bilhete.test',
     sms: { send: async (to: string, text: string) => { smsSent.push({ to, text }); } },
+    push: { publicKey: 'BPUBLIC-TEST-KEY', send: async (sub: any, msg: any) => { if (sub.endpoint.includes('gone')) throw Object.assign(new Error('gone'), { statusCode: 410 }); pushSent.push({ endpoint: sub.endpoint, msg }); } },
     google: { clientId: 'cid', clientSecret: 'sec', exchange: async (code: string) => { const p = googleStub[code]; if (!p) throw new Error('código recusado'); return p; } },
     mpesa: {
       charge: async (p: any) => { mpesaStub.calls.push(p); const n = mpesaStub.next.shift(); return typeof n === 'function' ? n() : n ?? { outcome: 'SUCCESS', code: 'INS-0', message: 'ok', transactionId: 'TX-' + mpesaStub.calls.length }; },
@@ -909,6 +911,52 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     expect(((await onHost.json()) as any).start_url).toBe('/');
     expect((await fetch(base + '/anything', { headers: { 'x-forwarded-host': 'platform.bilhete.test' } })).headers.get('x-robots-tag')).toBe('noindex, nofollow');
     expect(pm).toMatchObject({ name: 'Bilhete+ Administração', start_url: '/platform/' });
+  });
+
+  it('notificações push: subscrever, aviso de novo evento (uma vez), bilhetes confirmados, lembrete 24 h antes, limpeza de subscrições mortas', async () => {
+    const drain = () => appInst.drain();
+    expect((await call('GET', '/public/config')).body.push).toBe(true);
+    expect((await call('GET', '/public/push/config')).body.publicKey).toBe('BPUBLIC-TEST-KEY');
+    const sub = (name: string, extra: object = {}, tok?: string) => call('POST', '/public/push/subscribe', { subscription: { endpoint: `https://push.example.test/${name}-endpoint-abcdef`, keys: { p256dh: 'p'.repeat(40), auth: 'a'.repeat(20) } }, ...extra }, tok);
+    expect((await call('POST', '/public/push/subscribe', { subscription: { endpoint: 'http://inseguro/x', keys: {} } })).status).toBe(400);
+    expect((await sub('anon')).status).toBe(200);
+    expect((await sub('gone')).status).toBe(200);
+    expect((await sub('soBilhetes', { topics: ['tickets'] })).status).toBe(200);
+    const acc = (await call('POST', '/account/register', { name: 'Push', email: 'push@teste.mz', password: 'pw-push-12345' })).body.token;
+    expect((await sub('conta', {}, acc)).status).toBe(200);
+    expect((await db.query<any>(`SELECT account_id FROM push_subscriptions WHERE endpoint LIKE '%conta-endpoint%'`)).rows[0].account_id).toBeTruthy(); // ligada à conta
+    // primeira publicação: avisa quem quer «novos eventos»; a subscrição morta é apagada; quem só quer bilhetes não recebe
+    const ev = (await call('POST', '/events', { name: 'Festival Novidade', location: 'Maputo', startsAt: '2031-07-01T10:00:00Z', endsAt: '2031-07-01T22:00:00Z' }, S.adminA)).body;
+    pushSent.length = 0;
+    await call('POST', `/events/${ev.id}/publish`, {}, S.adminA); await drain();
+    const got = pushSent.map((x) => x.endpoint);
+    expect(got.some((e) => e.includes('anon-endpoint'))).toBe(true);
+    expect(got.some((e) => e.includes('conta-endpoint'))).toBe(true);
+    expect(got.some((e) => e.includes('soBilhetes'))).toBe(false);
+    expect((await db.query<any>(`SELECT count(*)::int AS c FROM push_subscriptions WHERE endpoint LIKE '%gone-endpoint%'`)).rows[0].c).toBe(0);
+    expect(pushSent[0].msg).toMatchObject({ title: 'Novo evento no Bilhete+', url: expect.stringContaining(ev.subdomain) });
+    expect(pushSent[0].msg.body).toContain('Festival Novidade');
+    pushSent.length = 0;
+    await call('POST', `/events/${ev.id}/publish`, {}, S.adminA); await drain();
+    expect(pushSent).toHaveLength(0); // publicar outra vez não volta a avisar
+    // compra paga: a conta recebe «bilhetes confirmados»
+    const tt = (await call('POST', `/events/${ev.id}/ticket-types`, { name: 'Geral', priceMinor: MT(50), quantity: 5 }, S.adminA)).body.id;
+    const o = await buyTicket(ev.subdomain, { items: [{ ticketTypeId: tt, qty: 1 }] }, acc);
+    expect(o.status).toBe(200);
+    await webhook({ id: 'evt-push-' + o.body.orderId, type: 'payment.succeeded', kind: 'ORDER', ref: o.body.orderId }); await drain();
+    const paid = pushSent.filter((x) => x.msg.title === 'Bilhetes confirmados');
+    expect(paid.map((x) => x.endpoint)).toEqual(expect.arrayContaining([expect.stringContaining('conta-endpoint'), expect.stringContaining('soBilhetes')].slice(0, 1)));
+    expect(paid.every((x) => !x.endpoint.includes('anon-endpoint'))).toBe(true); // só o aparelho da conta
+    // lembrete 24 h antes: uma só vez
+    await db.query(`UPDATE events SET starts_at=now()+interval '20 hours', ends_at=now()+interval '30 hours' WHERE id=$1`, [ev.id]);
+    pushSent.length = 0;
+    expect(await appInst.runPushReminders()).toBeGreaterThan(0);
+    expect(pushSent.some((x) => x.msg.title === 'O seu evento é amanhã')).toBe(true);
+    pushSent.length = 0;
+    expect(await appInst.runPushReminders()).toBe(0);
+    // sair
+    await call('POST', '/public/push/unsubscribe', { endpoint: 'https://push.example.test/anon-endpoint-abcdef' });
+    expect((await db.query<any>(`SELECT count(*)::int AS c FROM push_subscriptions WHERE endpoint LIKE '%anon-endpoint%'`)).rows[0].c).toBe(0);
   });
 
   it('endereço curto do evento: sugerido pelo nome, verificado, nunca duplicado nem reservado', async () => {
