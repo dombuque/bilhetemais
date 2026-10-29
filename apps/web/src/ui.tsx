@@ -2,6 +2,7 @@ import { InstallButton } from './install';
 import { getLang, setLang } from './i18n';
 import QRCode from 'qrcode';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { setToken } from './api';
 
 import { Icon } from './icons';
@@ -58,14 +59,14 @@ export function ConfirmButton({ label, confirmLabel = 'Confirmar', onConfirm, di
 
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   useEffect(() => { const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose(); window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [onClose]);
-  return (
+  // desenhada no <body>: dentro de um menu fixo ou de uma barra recortada ficaria presa (e cortada) à caixa do pai
+  return createPortal(
     <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="sheet stack" role="dialog" aria-modal="true" aria-label={title}>
         <div className="between"><h2>{title}</h2><button className="ghost sm" aria-label="Fechar" onClick={onClose}><Icon n="x" /></button></div>
         {children}
       </div>
-    </div>
-  );
+    </div>, document.body);
 }
 
 export const Empty = ({ icon = 'box', children }: { icon?: string; children: ReactNode }) => <div className="empty"><Icon n={icon} className="" />{<p>{children}</p>}</div>;

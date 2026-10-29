@@ -396,3 +396,5 @@ body:has(.shell) { background: #f4f2ee; }
 .install-banner img { border-radius: 10px; flex: none; } .install-banner div { flex: 1; min-width: 0; display: grid; } .install-banner b { font: 800 .95rem var(--font-display); } .install-banner small { color: #c9c6e2; font-size: .75rem; }
 .install-banner .ib-go { background: #5ce1ff; color: #0b0820; border: 0; min-height: 40px; padding: 0 16px; font: 800 .8rem var(--font-display); text-transform: uppercase; cursor: pointer; border-radius: 0; box-shadow: none; flex: none; } .install-banner .ib-x { background: transparent; color: #c9c6e2; border: 0; min-height: 40px; width: 36px; padding: 0; box-shadow: none; flex: none; }
 body:has(.app-tabs) .install-banner { bottom: calc(var(--tabs-h) + 10px + env(safe-area-inset-bottom)); } body:has(.sticky-bar) .install-banner { bottom: calc(96px + env(safe-area-inset-bottom)); }
+/* janelas: acima de tudo (menus, separadores, barra de instalar) e com altura que respeita a barra do Safari */
+.scrim { z-index: 200; } .sheet { max-height: 88vh; max-height: 88dvh; }
