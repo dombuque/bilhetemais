@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Icon, Modal } from './ui';
+import { Icon } from './ui';
 
 /** O navegador avisa que a app pode ser instalada (Chrome, Edge, Android…). Guarda-se o aviso para o botão «Instalar» o usar. */
 interface InstallEvent extends Event { prompt(): Promise<void>; userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }> }
@@ -28,44 +28,26 @@ export function useInstall() {
   return { installed: isStandalone() || related || flagged(), canPrompt: !!deferred, ios: isIOS(), prompt: async () => { if (!deferred) return false; await deferred.prompt(); const r = await deferred.userChoice; deferred = null; listeners.forEach((l) => l()); return r.outcome === 'accepted'; } };
 }
 
-/** Botão «Instalar app»: instala com um toque onde o navegador deixa; no iPhone/iPad e noutros mostra os passos. Some quando já está instalada. */
-export function InstallButton({ label = 'Baixar app', className = 'lp-btn ghost sm', staff = false }: { label?: string; className?: string; staff?: boolean }) {
+/** Botão «Instalar app»: um toque e o próprio navegador instala (só pede a permissão). Só aparece onde isso é possível e a app ainda não está instalada. */
+export function InstallButton({ label = 'Baixar app', className = 'lp-btn ghost sm' }: { label?: string; className?: string; staff?: boolean }) {
   const inst = useInstall();
-  const [help, setHelp] = useState(false);
-  if (inst.installed) return null;
-  const go = async () => { if (inst.canPrompt) await inst.prompt(); else setHelp(true); };
-  return (
-    <>
-      <button type="button" className={className} onClick={go}><Icon n="arrowdown" />{label}</button>
-      {help && (
-        <Modal title={staff ? 'Instalar a app da equipa' : 'Instalar a app Bilhete+'} onClose={() => setHelp(false)}>
-          <p className="muted small">A app abre em ecrã inteiro, com o ícone no telemóvel, como qualquer outra.</p>
-          {inst.ios
-            ? <ol className="install-steps"><li>Abra esta página no <b>Safari</b>.</li><li>Toque em <b>Partilhar</b> <span aria-hidden="true">⬆️</span> (em baixo ou no topo).</li><li>Escolha <b>«Adicionar ao ecrã principal»</b> e confirme.</li></ol>
-            : <ol className="install-steps"><li>Abra o <b>menu do navegador</b> (⋮ no Chrome, ⋯ no Edge).</li><li>Toque em <b>«Instalar app»</b> ou <b>«Adicionar ao ecrã principal»</b>.</li><li>Confirme. O ícone do Bilhete+ aparece no telemóvel.</li></ol>}
-        </Modal>)}
-    </>
-  );
+  if (inst.installed || !inst.canPrompt) return null;
+  return <button type="button" className={className} onClick={() => { void inst.prompt(); }}><Icon n="arrowdown" />{label}</button>;
 }
 
 const DISMISS = 'bp_install_dismissed';
-/** Barra fixa em baixo, só no telemóvel e só se o aparelho ainda NÃO tem a app: «Instale a app». Fecha-se e não volta durante 14 dias. */
+/** Barra fixa em baixo, só no telemóvel e só se o aparelho ainda NÃO tem a app e o navegador a pode instalar: um toque em «Instalar». Fecha-se e não volta durante 14 dias. */
 export function InstallBanner() {
   const inst = useInstall();
   const [hidden, setHidden] = useState(() => { try { return Date.now() - Number(localStorage.getItem(DISMISS) ?? 0) < 14 * 864e5; } catch { return false; } });
-  const [help, setHelp] = useState(false);
-  if (inst.installed || hidden || !(inst.canPrompt || inst.ios)) return null;
+  if (inst.installed || hidden || !inst.canPrompt) return null;
   const close = () => { try { localStorage.setItem(DISMISS, String(Date.now())); } catch { /* sem armazenamento */ } setHidden(true); };
   return (
     <div className="install-banner" role="region" aria-label="Instalar a app">
       <img src="/icon-192.png" alt="" width="44" height="44" />
       <div><b>Bilhete+ no seu telemóvel</b><small>Eventos e bilhetes sempre à mão, em ecrã inteiro.</small></div>
-      <button type="button" className="ib-go" onClick={async () => { if (inst.canPrompt) { await inst.prompt(); close(); } else setHelp(true); }}>Instalar</button>
+      <button type="button" className="ib-go" onClick={async () => { await inst.prompt(); close(); }}>Instalar</button>
       <button type="button" className="ib-x" aria-label="Fechar" onClick={close}><Icon n="x" /></button>
-      {help && (
-        <Modal title="Instalar a app Bilhete+" onClose={() => setHelp(false)}>
-          <ol className="install-steps"><li>Abra esta página no <b>Safari</b>.</li><li>Toque em <b>Partilhar</b> <span aria-hidden="true">⬆️</span>.</li><li>Escolha <b>«Adicionar ao ecrã principal»</b> e confirme.</li></ol>
-        </Modal>)}
     </div>
   );
 }

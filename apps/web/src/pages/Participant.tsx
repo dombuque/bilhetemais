@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { accountApi, accountToken, dt, mainUrl, mt, onEventHost, setAccountToken } from '../api';
 import { Empty, Icon, LangSwitch, Pill, Skeleton, useAction, useToast } from '../ui';
 import { AppTabs } from '../AppTabs';
-import { InstallButton } from '../install';
+import { InstallButton, useInstall } from '../install';
 import './participant.css';
 
 export interface Me { name: string; email: string | null; phone: string | null; hasPassword?: boolean; newsletter?: boolean }
@@ -125,6 +125,7 @@ export function AccountPage({ view = 'tickets' }: { view?: 'tickets' | 'profile'
   const [del, setDel] = useState('');
   const load = useCallback(() => accountApi('GET', '/account/orders').then(setOrders).catch(() => setOrders([])), []);
   useEffect(() => { if (me) { if (view === 'tickets') load(); setProf({ name: me.name, phone: me.phone ?? '' }); } }, [me, load, view]);
+  const inst = useInstall();
   const toggle = (k: string) => setOpen(open === k ? null : k);
   const method = me ? (me.email && me.hasPassword === false ? 'Google' : me.email ? 'E-mail' : 'Telemóvel') : '';
 
@@ -175,7 +176,7 @@ export function AccountPage({ view = 'tickets' }: { view?: 'tickets' | 'profile'
               <p className="pp-sub">Os e-mails das suas compras (bilhetes e pagamentos) continuam a chegar sempre.</p>
             </Row>}
             <section className="pp-row-item"><div className="pp-row-head static"><span className="pp-row-ic"><Icon n="globe" /></span><span className="pp-row-tx"><b>Idioma</b></span><LangSwitch /></div></section>
-            <section className="pp-row-item"><div className="pp-row-head static"><span className="pp-row-ic"><Icon n="arrowdown" /></span><span className="pp-row-tx"><b>App no telemóvel</b><small>Instale o Bilhete+ no ecrã principal</small></span><InstallButton label="Instalar" className="pp-link" /></div></section>
+            {inst.canPrompt && !inst.installed && <section className="pp-row-item"><div className="pp-row-head static"><span className="pp-row-ic"><Icon n="arrowdown" /></span><span className="pp-row-tx"><b>App no telemóvel</b><small>Instale o Bilhete+ no ecrã principal</small></span><InstallButton label="Instalar" className="pp-link" /></div></section>}
             <Row icon="trash" title="Apagar conta" hint="Remove os seus dados pessoais" open={open === 'del'} onToggle={() => toggle('del')} danger>
               <p className="pp-sub">Os bilhetes já emitidos continuam válidos através do link de cada bilhete.</p>
               {me.hasPassword === false
