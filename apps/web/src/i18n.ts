@@ -1,4 +1,8 @@
-import { EN, EN_PATTERNS } from './locales/en';
+import { EN as EN_PUBLIC, EN_PATTERNS as P_PUBLIC } from './locales/en';
+import { EN_ADMIN, EN_ADMIN_PATTERNS } from './locales/en-admin';
+
+const EN: Record<string, string> = { ...EN_ADMIN, ...EN_PUBLIC }; // o dicionário público tem prioridade
+const EN_PATTERNS = [...P_PUBLIC, ...EN_ADMIN_PATTERNS];
 
 export type Lang = 'pt' | 'en';
 const KEY = 'bp_lang';

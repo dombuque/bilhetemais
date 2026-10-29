@@ -73,7 +73,7 @@ function Sell({ eid, types, onSold, toast }: { eid: string; types: any[]; onSold
     <div className="stack">
       <div className="card stack center"><Icon n="check" className="icon" /><h2>Venda registada · {mt(sale.totalMinor)}</h2><p className="muted">Numerário recebido.</p>
         <div className="inline" style={{ justifyContent: 'center' }}><button onClick={() => window.print()}><Icon n="print" />Imprimir bilhetes</button><button className="ghost" onClick={() => setSale(null)}>Nova venda</button></div></div>
-      {sale.tickets.map((tk: any, i: number) => <div className="card stack center" key={tk.id}><h3>Bilhete {i + 1}</h3><Qr value={tk.token} label={`QR do bilhete ${i + 1}`} />{tk.format === 'PHYSICAL' && <Barcode value={tk.token} />}<TokenCode value={tk.token} /><p className="muted small mono">{tk.id.slice(0, 8).toUpperCase()}</p></div>)}
+      {sale.tickets.map((tk: any, i: number) => <div className="card stack center" key={tk.id}><h3>Bilhete {i + 1}</h3><Qr value={tk.token} label={`QR do bilhete ${i + 1}`} />{tk.format === 'PHYSICAL' && <Barcode value={tk.token} />}<TokenCode value={tk.token} shortCode={tk.shortCode} /><p className="muted small mono">{tk.id.slice(0, 8).toUpperCase()}</p></div>)}
       {sale.tickets.map((tk: any) => (
         <div className="ticket-print" key={'p' + tk.id}><h2>Bilhete+</h2><p>{tk.id.slice(0, 8).toUpperCase()}</p><Qr value={tk.token} /><Barcode value={tk.token} /><p className="mono" style={{ fontSize: '.8rem', letterSpacing: '.05em' }}>{tk.token.match(/.{1,4}/g).join(' ')}</p>
           <p>Apresente este bilhete à entrada. Pode carregar saldo no balcão e pagar com este mesmo QR.</p><p><small>Perdeu o bilhete? Dirija-se ao balcão de apoio.</small></p></div>))}

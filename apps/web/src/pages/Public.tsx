@@ -204,7 +204,7 @@ export function Order({ id, cfg }: { id: string; cfg: Config }) {
         <section key={t.id} className="stub">
           <div className="top"><span className="eyebrow">Bilhete {i + 1}</span><h3 style={{ marginTop: 6 }}>Apresente à entrada</h3></div>
           <div className="perf" />
-          <div className="bottom stack center"><Qr value={t.token} label={`QR do bilhete ${i + 1}`} /><TokenCode value={t.token} />
+          <div className="bottom stack center"><Qr value={t.token} label={`QR do bilhete ${i + 1}`} /><TokenCode value={t.token} shortCode={t.shortCode} />
             <a className="btn wide" href={`/t/${t.token}`}><Icon n="wallet" />Abrir bilhete e carteira</a>
             <p className="muted small">Guarde este link: dá acesso ao bilhete e ao saldo.</p></div>
         </section>
@@ -253,7 +253,7 @@ export function Wallet({ token, cfg }: { token: string; cfg: Config }) {
             </div>
             <div className="perf" />
             <div className="body stack center">
-              <Qr value={token} label="QR de entrada e pagamento" /><TokenCode value={token} />
+              <Qr value={token} label="QR de entrada e pagamento" /><TokenCode value={token} shortCode={w.shortCode} />
               <p className="muted small">Mostre à porta para entrar e ao comerciante para pagar. O QR não contém o seu saldo.</p>
             </div>
           </section>

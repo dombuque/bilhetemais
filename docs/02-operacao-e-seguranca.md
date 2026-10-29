@@ -16,13 +16,19 @@
 
 Todas as rotas de evento verificam que o evento pertence à empresa do utilizador (404 caso contrário). Um comerciante só cobra carteiras do seu evento.
 
-## Registo de empresas (self-service) e aprovação — DESLIGADO por omissão
-Por decisão actual, **as empresas são criadas pela administração em `/staff`** (ficam activas e a palavra-passe inicial é mostrada uma vez). O registo público existe mas está atrás do interruptor `SELF_REGISTRATION=true` (por omissão desligado: `/public/register` responde 404 e `/register` mostra «registo fechado»). O texto abaixo descreve o fluxo quando o interruptor está ligado.
+## Registo de empresas (self-service) e aprovação
+As empresas **registam-se sozinhas** em `/register` (denominação, nome comercial, NUIT de 9 dígitos, responsável, e-mail, palavra-passe, termos) e **só operam depois de aprovadas pela Bilhete+**. O interruptor `SELF_REGISTRATION=true` liga o registo (em produção está ligado; sem ele `/public/register` responde 404). A administração também pode criar empresas já activas em `/platform → Empresas → Nova empresa`.
 
-1. Qualquer pessoa regista a empresa em `/register` (denominação, nome comercial, NUIT de 9 dígitos, responsável, e-mail, palavra-passe, aceitação dos termos). Limite de 5 registos/minuto por IP.
+1. Limite de registos por minuto e IP (`REGISTER_RATE_LIMIT`). Quem se regista recebe, uma só vez, o endereço da área da sua empresa (`/company/<identificador>`); esse endereço **não é divulgado** em nenhuma página pública.
 2. A empresa fica **PENDENTE**. O responsável pode entrar, completar o perfil, anexar documentos (PDF/PNG/JPEG até 3 MB) e escolher a marca, mas **não pode criar eventos nem operar** até ser aprovada.
 3. A administração Bilhete+ revê (documentos descarregados como anexo), aprova, rejeita ou suspende, com motivo obrigatório para rejeitar/suspender. A empresa rejeitada pode corrigir e voltar a submeter.
-4. Pendente: notificações por e-mail (aprovação/rejeição) e verificação do e-mail — exigem SMTP configurado.
+4. Os e-mails de aprovação/rejeição são registados e só são enviados se o SMTP estiver configurado.
+
+## Dois backoffices separados
+- **Bilhete+ (plataforma):** `/platform`. Só contas `PLATFORM_ADMIN` entram (o servidor recusa as restantes com a mesma mensagem genérica). Empresas, todos os eventos (cartões com receita), newsletter. Etiqueta «Bilhete+ · Plataforma» no menu.
+- **Empresa (tenant):** `/company/<identificador>`. Só a equipa dessa empresa entra. Etiqueta «Empresa · nome» no menu.
+- Os endereços das áreas privadas **não aparecem** em nenhuma página pública, não são indexáveis (`X-Robots-Tag: noindex`) e um identificador que não existe responde como um que existe. O antigo `/staff` já não existe (reencaminha para a página inicial).
+- Travões: limite por IP no login (`LOGIN_RATE_LIMIT`) e pausa de 15 minutos após 8 palavras-passe erradas seguidas para o mesmo e-mail.
 
 ## Área própria, equipa e isolamento por empresa
 - Cada empresa tem um endereço de entrada próprio, `/company/<identificador>`, com o nome, as cores e o logótipo dela. O identificador é gerado a partir do nome comercial e é único.
@@ -47,8 +53,11 @@ Por decisão actual, **as empresas são criadas pela administração em `/staff`
 - Fecho de caixa compara numerário esperado e contado; reconciliação: carregamentos no ledger = digitais confirmados + numerário.
 
 ## Configuração (`apps/api/.env`)
-`PGHOST, PGPORT, PGUSER, PGPASSWORD, PG_DATABASE, PORT, TOKEN_SECRET, WEBHOOK_SECRET, BASE_DOMAIN`
-e, **apenas em desenvolvimento**, `PAYMENT_SIMULATOR=true`. Em produção o simulador tem de estar desligado.
+`PGHOST, PGPORT, PGUSER, PGPASSWORD, PG_DATABASE, PORT, TOKEN_SECRET, WEBHOOK_SECRET, BASE_DOMAIN, PUBLIC_URL`,
+`SELF_REGISTRATION`, `LOGIN_RATE_LIMIT`, `REGISTER_RATE_LIMIT`, `PUBLIC_RATE_LIMIT`;
+M-Pesa: `MPESA_BASE_URL, MPESA_API_KEY, MPESA_PUBLIC_KEY, MPESA_SERVICE_PROVIDER_CODE, MPESA_ORIGIN`;
+Google: `GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET`; e-mail: `SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM`.
+`PAYMENT_SIMULATOR=true` **apenas em desenvolvimento**: em produção o simulador tem de estar desligado.
 
 ## Comandos
 ```

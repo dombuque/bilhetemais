@@ -761,7 +761,7 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     const mk = async (name: string) => {
       const o = (await buyTicket('festival-de-maputo', { buyerName: name, buyerContact: name.toLowerCase() + '@teste.mz', items: [{ ticketTypeId: S.type, qty: 1 }] })).body.orderId;
       await webhook({ id: 'evt-tc-' + o, type: 'payment.succeeded', kind: 'ORDER', ref: o });
-      return (await call('GET', `/public/orders/${o}`)).body.tickets[0] as { id: string; token: string };
+      return (await call('GET', `/public/orders/${o}`)).body.tickets[0] as { id: string; token: string; shortCode: string };
     };
     const scan = (token: string) => call('POST', `/events/${S.event}/scan`, { token, gateId: S.gateId }, S.gate);
     const t1 = await mk('Controlada');
@@ -788,7 +788,11 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     expect((await call('POST', `/tickets/${t1.id}/unblock`, {}, S.adminB)).status).toBe(404);
     expect((await call('POST', `/tickets/${t1.id}/unblock`, {}, S.adminA)).body.status).toBe('ISSUED');
     expect((await call('POST', `/tickets/${t1.id}/unblock`, {}, S.adminA)).status).toBe(409);
-    expect((await scan(t1.token)).body.result).toBe('VALID');
+    // a portaria também aceita o código curto (8 caracteres, com ou sem hífen, em maiúsculas ou minúsculas)
+    expect(t1.shortCode).toMatch(/^[A-Z2-9]{8}$/);
+    expect((await scan(t1.shortCode.slice(0, 4).toLowerCase() + '-' + t1.shortCode.slice(4))).body.result).toBe('VALID');
+    expect((await scan(t1.shortCode)).body.result).toBe('ALREADY_USED');
+    expect((await scan('ZZZZZZZZ')).body.result).toBe('UNAUTHORIZED');
     // um bilhete já usado, bloqueado e desbloqueado, volta a "usado"
     expect((await call('POST', `/tickets/${t1.id}/block`, { reason: 'Verificação' }, S.adminA)).status).toBe(200);
     expect((await call('POST', `/tickets/${t1.id}/unblock`, {}, S.adminA)).body.status).toBe('USED');

@@ -358,8 +358,8 @@ export function createApp(db: Db, cfg: AppConfig) {
       [ev.id, channel, str(b.buyerName, 'buyerName'), b.buyerContact ?? null, total.toString(), status]);
     for (const l of lines) for (let i = 0; i < l.qty; i++) {
       const id = randomUUID();
-      await tx.query(`INSERT INTO tickets(id,event_id,order_id,ticket_type_id,token_hash,format,status) VALUES($1,$2,$3,$4,$5,$6,'PENDING')`,
-        [id, ev.id, o.rows[0].id, l.typeId, hashToken(tokenFor(id)), format]);
+      await tx.query(`INSERT INTO tickets(id,event_id,order_id,ticket_type_id,token_hash,format,status,short_code) VALUES($1,$2,$3,$4,$5,$6,'PENDING',$7)`,
+        [id, ev.id, o.rows[0].id, l.typeId, hashToken(tokenFor(id)), format, await freshShortCode(tx, ev.id)]);
     }
     if (status === 'PAID') await issueOrder(tx, o.rows[0].id);
     return { orderId: o.rows[0].id as string, total, status };
@@ -381,9 +381,26 @@ export function createApp(db: Db, cfg: AppConfig) {
       await queueMail(db, cfg.mailer ?? null, tx, { to: o.buyer_contact.toLowerCase(), subject: `Os seus bilhetes — ${o.event}`, text });
     }
   };
+  /** Código curto único por evento (sem I, L, O, 0, 1 para não se confundirem ao ler e digitar). */
+  const SHORT_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const freshShortCode = async (tx: Tx, eventId: string) => {
+    for (;;) {
+      const code = Array.from(randomBytes(8), (b) => SHORT_ALPHABET[b % SHORT_ALPHABET.length]).join('');
+      if (!(await tx.query('SELECT 1 FROM tickets WHERE event_id=$1 AND short_code=$2', [eventId, code])).rows[0]) return code;
+    }
+  };
+  /** Aceita o código curto («ABCD-EFGH», com ou sem espaços) ou o código completo do bilhete. */
+  const shortCodeOf = (input: string) => { const c = input.toUpperCase().replace(/[\s-]/g, ''); return /^[A-Z2-9]{8}$/.test(c) ? c : null; };
+  const findTicket = async (tx: Tx, eventId: string, input: string) => {
+    const sc = shortCodeOf(input);
+    const r = sc
+      ? await tx.query<any>('SELECT id,status FROM tickets WHERE event_id=$1 AND short_code=$2', [eventId, sc])
+      : await tx.query<any>('SELECT id,status FROM tickets WHERE token_hash=$1 AND event_id=$2', [hashToken(input), eventId]);
+    return r.rows[0] as { id: string; status: string } | undefined;
+  };
   const orderTickets = async (tx: Tx, orderId: string) => {
-    const r = await tx.query<any>(`SELECT id,format,status,ticket_type_id FROM tickets WHERE order_id=$1 ORDER BY created_at,id`, [orderId]);
-    return r.rows.map((t: any) => ({ ...t, token: t.status === 'PENDING' ? null : tokenFor(t.id) }));
+    const r = await tx.query<any>(`SELECT id,format,status,ticket_type_id,short_code AS "shortCode" FROM tickets WHERE order_id=$1 ORDER BY created_at,id`, [orderId]);
+    return r.rows.map((t: any) => ({ ...t, token: t.status === 'PENDING' ? null : tokenFor(t.id), shortCode: t.status === 'PENDING' ? null : t.shortCode }));
   };
 
   // ---------- público (participante) ----------
@@ -628,7 +645,8 @@ export function createApp(db: Db, cfg: AppConfig) {
     const t = await byTicketToken(req.params.token);
     const mv = await db.query<any>('SELECT id,type,amount_minor,created_at FROM wallet_ledger_entries WHERE wallet_id=$1 ORDER BY created_at DESC,id LIMIT 50', [t.wallet_id]);
     const evRow = (await db.query<any>('SELECT * FROM events WHERE id=$1', [t.event_id])).rows[0];
-    return { event: t.event_name, ticketStatus: t.status, balanceMinor: await wallet.balanceOf(t.wallet_id), movements: mv.rows, ...(await eventBrand(evRow)), settings: publicSettings((await settingsOf(db, evRow)).effective) };
+    const sc = (await db.query<any>('SELECT short_code FROM tickets WHERE id=$1', [t.id])).rows[0]?.short_code ?? null;
+    return { event: t.event_name, ticketStatus: t.status, shortCode: sc, balanceMinor: await wallet.balanceOf(t.wallet_id), movements: mv.rows, ...(await eventBrand(evRow)), settings: publicSettings((await settingsOf(db, evRow)).effective) };
   }));
   app.post('/public/tickets/:token/topup', h(async (req) => {
     const t = await byTicketToken(req.params.token);
@@ -806,11 +824,12 @@ export function createApp(db: Db, cfg: AppConfig) {
   // ---------- controlo de entradas ----------
   app.post('/events/:id/scan', ...staff('GATE_OPERATOR'), h(async (req) => {
     const ev = await eventFor(req.user!, req.params.id);
-    const hash = hashToken(str(req.body.token, 'token'));
+    const input = str(req.body.token, 'token').trim();
     return db.transaction(async (tx) => {
       const st = (await settingsOf(tx, ev)).effective;
       let result: string, ticketId: string | null = null;
-      const t = await tx.query<any>('SELECT id,status FROM tickets WHERE token_hash=$1 AND event_id=$2', [hash, ev.id]);
+      const tk = await findTicket(tx, ev.id, input);
+      const t = { rows: tk ? [tk] : [] as { id: string; status: string }[] };
       if (t.rows[0]) ticketId = t.rows[0].id;
       if (!t.rows[0] || t.rows[0].status === 'PENDING') result = 'UNAUTHORIZED';
       else if (t.rows[0].status === 'REVOKED') result = 'REVOKED';
@@ -1531,8 +1550,9 @@ export function createApp(db: Db, cfg: AppConfig) {
   app.get('/events/:id/gate-manifest', ...staff('GATE_OPERATOR'), h(async (req) => {
     const ev = await eventFor(req.user!, req.params.id);
     const st = (await settingsOf(db, ev)).effective;
-    const t = await db.query<any>(`SELECT token_hash AS h,status AS s FROM tickets WHERE event_id=$1 AND status IN ('ISSUED','USED','REVOKED','BLOCKED')`, [ev.id]);
-    return { generatedAt: new Date().toISOString(), endsAt: ev.ends_at, reentryAllowed: st.reentryAllowed, tickets: t.rows };
+    const t = await db.query<any>(`SELECT token_hash AS h,status AS s,short_code FROM tickets WHERE event_id=$1 AND status IN ('ISSUED','USED','REVOKED','BLOCKED')`, [ev.id]);
+    // o código curto vai em hash (k), tal como o código completo: a lista guardada no telemóvel não revela nenhum código
+    return { generatedAt: new Date().toISOString(), endsAt: ev.ends_at, reentryAllowed: st.reentryAllowed, tickets: t.rows.map((r: any) => ({ h: r.h, s: r.s, k: r.short_code ? createHash('sha256').update(r.short_code).digest('hex') : undefined })) };
   }));
   /** Sincroniza leituras feitas offline. Idempotente por clientId; conflitos (já usado noutra porta) ficam sinalizados. */
   app.post('/events/:id/scan-batch', ...staff('GATE_OPERATOR'), h(async (req) => {
@@ -1546,10 +1566,11 @@ export function createApp(db: Db, cfg: AppConfig) {
       out.push(await db.transaction(async (tx) => {
         const dup = await tx.query<any>('SELECT result FROM entry_scans WHERE event_id=$1 AND client_id=$2', [ev.id, clientId]);
         if (dup.rows[0]) return { clientId, result: dup.rows[0].result, conflict: false };
-        const t = (await tx.query<any>('SELECT id,status FROM tickets WHERE token_hash=$1 AND event_id=$2', [hashToken(str(sc.token, 'token')), ev.id])).rows[0];
+        const t = await findTicket(tx, ev.id, str(sc.token, 'token').trim());
         let result: string;
         if (!t || t.status === 'PENDING') result = 'UNAUTHORIZED';
         else if (t.status === 'REVOKED') result = 'REVOKED';
+        else if (t.status === 'BLOCKED') result = 'BLOCKED';
         else if (new Date(ev.ends_at) < when) result = 'EXPIRED';
         else {
           const u = await tx.query(`UPDATE tickets SET status='USED',used_at=$2 WHERE id=$1 AND status='ISSUED' RETURNING id`, [t.id, when]);

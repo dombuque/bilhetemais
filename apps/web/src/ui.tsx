@@ -152,12 +152,15 @@ export function Qr({ value, label }: { value: string; label?: string }) {
 }
 
 /** Código escrito por baixo do QR: o mesmo valor, em grupos de 4, para a portaria o poder digitar. */
-export function TokenCode({ value }: { value: string }) {
+export function TokenCode({ value, shortCode }: { value: string; shortCode?: string | null }) {
   const [copied, setCopied] = useState(false);
+  const short = shortCode ? shortCode.slice(0, 4) + '-' + shortCode.slice(4) : null;
   return (
     <div className="token-code">
       <span className="muted small">Código do bilhete (se o QR não ler)</span>
-      <code aria-label={'Código ' + value}>{value.match(/.{1,4}/g)!.join(' ')}</code>
+      {short && <code className="short" aria-label={'Código ' + short}>{short}</code>}
+      {short ? <details className="small"><summary>Código completo</summary><code aria-label={'Código completo ' + value}>{value.match(/.{1,4}/g)!.join(' ')}</code></details>
+        : <code aria-label={'Código ' + value}>{value.match(/.{1,4}/g)!.join(' ')}</code>}
       <button type="button" className="ghost sm" onClick={() => { navigator.clipboard?.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1800); }}><Icon n="copy" />{copied ? 'Copiado' : 'Copiar código'}</button>
     </div>
   );

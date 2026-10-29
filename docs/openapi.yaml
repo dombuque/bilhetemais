@@ -11,6 +11,84 @@ components:
   securitySchemes:
     bearer: { type: http, scheme: bearer }
 paths:
+  /account/google/callback:
+    get:
+      tags: [account]
+      operationId: get_account_google_callback
+      description: "Público."
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /account/google/start:
+    get:
+      tags: [account]
+      operationId: get_account_google_start
+      description: "Público."
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /account/login:
+    post:
+      tags: [account]
+      operationId: post_account_login
+      description: "Público."
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /account/logout:
+    post:
+      tags: [account]
+      operationId: post_account_logout
+      description: "Público."
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /account/me:
+    get:
+      tags: [account]
+      operationId: get_account_me
+      description: "Público."
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+    patch:
+      tags: [account]
+      operationId: patch_account_me
+      description: "Público."
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+    delete:
+      tags: [account]
+      operationId: delete_account_me
+      description: "Público."
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /account/orders:
+    get:
+      tags: [account]
+      operationId: get_account_orders
+      description: "Público."
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /account/password:
+    post:
+      tags: [account]
+      operationId: post_account_password
+      description: "Público."
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /account/register:
+    post:
+      tags: [account]
+      operationId: post_account_register
+      description: "Público."
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
   /audit:
     get:
       tags: [audit]
@@ -32,6 +110,13 @@ paths:
         '200': { description: OK }
         '400': { description: Dados inválidos }
   /events:
+    get:
+      tags: [events]
+      operationId: get_events
+      description: "Público."
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
     post:
       tags: [events]
       operationId: post_events
@@ -602,6 +687,20 @@ paths:
         '401': { description: Não autenticado }
         '403': { description: Sem permissão ou empresa não aprovada }
         '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /events/{id}/tickets:
+    get:
+      tags: [events]
+      operationId: get_events_id_tickets
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
   /me:
     get:
       tags: [me]
@@ -880,6 +979,55 @@ paths:
         '401': { description: Não autenticado }
         '403': { description: Sem permissão ou empresa não aprovada }
         '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /platform/events:
+    get:
+      tags: [platform]
+      operationId: get_platform_events
+      description: "Funções: PLATFORM_ADMIN."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /platform/events/{id}/summary:
+    get:
+      tags: [platform]
+      operationId: get_platform_events_id_summary
+      description: "Funções: PLATFORM_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /platform/newsletter:
+    get:
+      tags: [platform]
+      operationId: get_platform_newsletter
+      description: "Funções: PLATFORM_ADMIN."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+    post:
+      tags: [platform]
+      operationId: post_platform_newsletter
+      description: "Funções: PLATFORM_ADMIN."
+      security: [{ bearer: [] }]
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
   /pos/pay:
     post:
       tags: [pos]
@@ -928,10 +1076,28 @@ paths:
         '401': { description: Não autenticado }
         '403': { description: Sem permissão ou empresa não aprovada }
         '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /public/charges/{id}:
+    get:
+      tags: [público]
+      operationId: get_public_charges_id
+      description: "Público."
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
   /public/config:
     get:
       tags: [público]
       operationId: get_public_config
+      description: "Público."
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /public/events:
+    get:
+      tags: [público]
+      operationId: get_public_events
       description: "Público."
       responses:
         '200': { description: OK }
@@ -978,10 +1144,46 @@ paths:
       responses:
         '200': { description: OK }
         '400': { description: Dados inválidos }
+  /public/geocode:
+    get:
+      tags: [público]
+      operationId: get_public_geocode
+      description: "Público."
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /public/newsletter/unsubscribe:
+    post:
+      tags: [público]
+      operationId: post_public_newsletter_unsubscribe
+      description: "Público."
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
   /public/orders/{id}:
     get:
       tags: [público]
       operationId: get_public_orders_id
+      description: "Público."
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /public/orders/{id}/email:
+    post:
+      tags: [público]
+      operationId: post_public_orders_id_email
+      description: "Público."
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+  /public/orders/{id}/pay:
+    post:
+      tags: [público]
+      operationId: post_public_orders_id_pay
       description: "Público."
       parameters:
         - { name: id, in: path, required: true, schema: { type: string } }
@@ -1079,10 +1281,52 @@ paths:
         '401': { description: Não autenticado }
         '403': { description: Sem permissão ou empresa não aprovada }
         '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /tickets/{id}/block:
+    post:
+      tags: [tickets]
+      operationId: post_tickets_id_block
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /tickets/{id}/cancel:
+    post:
+      tags: [tickets]
+      operationId: post_tickets_id_cancel
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
   /tickets/{id}/revoke:
     post:
       tags: [tickets]
       operationId: post_tickets_id_revoke
+      description: "Funções: ORG_ADMIN."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '400': { description: Dados inválidos }
+        '401': { description: Não autenticado }
+        '403': { description: Sem permissão ou empresa não aprovada }
+        '404': { description: Não encontrado (inclui recursos de outra empresa) }
+  /tickets/{id}/unblock:
+    post:
+      tags: [tickets]
+      operationId: post_tickets_id_unblock
       description: "Funções: ORG_ADMIN."
       security: [{ bearer: [] }]
       parameters:

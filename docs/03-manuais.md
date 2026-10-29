@@ -4,10 +4,13 @@
 > **Câmara e NFC exigem HTTPS** (ou `localhost`). **NFC pelo navegador só funciona em Android com Chrome**; no iPhone use a câmara.
 
 ## 1. Administração Bilhete+
-1. Entre em `/staff` com a conta da plataforma. Active a verificação em dois passos em «A minha conta».
+1. Entre em `/platform` com a conta da plataforma (o endereço não é divulgado: guarde-o). Active a verificação em dois passos em «A minha conta».
 2. **Criar uma empresa**: **Empresas → Nova empresa**. Preencha os dados e o administrador; a empresa fica **activa** e a palavra-passe inicial (gerada) é mostrada **uma única vez**: entregue-a ao responsável com o endereço de entrada da equipa.
 3. *(Só se o registo público estiver ligado)* **Empresas → Pendentes**: abra cada pedido, confira NUIT e documentos (descarregue-os) e escolha **Aprovar**, **Rejeitar** ou **Suspender** (rejeitar/suspender pedem motivo). A empresa recebe um e-mail, se o SMTP estiver configurado.
 3. Na ficha vê a equipa, os eventos e o endereço de entrada da empresa, só em leitura.
+
+## 1.1 Newsletter e eventos (plataforma)
+**Newsletter**: escreva assunto e mensagem, envie um teste a si e depois «Enviar a N subscritores». Só recebem as contas que não saíram; cada e-mail leva a ligação para deixar de receber. **Eventos**: cartões com a capa, a empresa e a receita; ao abrir um evento vê o total ganho (bilhetes + consumos na carteira).
 
 ## 2. Organizador (administrador da empresa)
 1. **Acesso**: a empresa é criada pela equipa Bilhete+, que lhe entrega o endereço `/company/<o-seu-nome>`, o e-mail e a palavra-passe inicial. Altere a palavra-passe em «A minha conta».
@@ -19,6 +22,9 @@
 7. **Acertos**: veja vendas líquidas, comissão, valor devido e em dívida por comerciante; **Registar pagamento** (nunca acima do que se deve); exporte **CSV** de acertos, movimentos e bilhetes. A comissão define-se por evento (Parâmetros) ou por comerciante.
 8. **Alertas** no Resumo (reconciliação, leituras repetidas, conflitos offline, reembolsos pendentes, dívidas). **Actividade** (menu) mostra o registo das operações sensíveis da empresa.
 9. **Reembolsos**: aprove ou rejeite pedidos de saldo (só se o evento o permitir).
+
+### 2.1 Gerir bilhetes emitidos
+No evento, separador **Bilhetes → Gerir bilhetes emitidos**: pesquise por nome, contacto ou código; **Bloquear** (reversível: o bilhete deixa de entrar e a carteira deixa de pagar, com **Desbloquear**) ou **Cancelar** (definitivo; o saldo devolve-se pelos reembolsos). O **motivo é obrigatório**, fica registado com quem e quando, e a portaria vê «BILHETE BLOQUEADO/CANCELADO» com o motivo, também sem rede.
 
 ## 3. Balcão / caixa (telemóvel)
 1. **Abrir caixa** no início do turno.
@@ -36,6 +42,7 @@
 4. **Vendas**: histórico e **Devolver** (uma só vez por venda).
 
 ## 5. Controlo de acessos (portaria, telemóvel)
+*Após cada leitura a portaria vê o nome do titular e o tipo de bilhete; num bilhete já usado, a hora e a porta da primeira entrada. Se o QR não ler, digite o **código curto** (8 caracteres) ou o código completo.*
 1. Escolha o evento e a porta. A câmara abre sozinha e lê continuamente.
 2. Resultado em ecrã inteiro: **verde** entrada válida; **laranja** já utilizado / expirado; **vermelho** revogado / não autorizado / erro. Há vibração e som.
 3. Em eventos com **reentrada** permitida, o mesmo bilhete volta a ser aceite.
@@ -48,11 +55,14 @@
 5. A lista fica guardada no navegador do telemóvel: não limpe os dados do navegador durante o evento.
 
 ## 6. Participante
+0. **Conta**: para comprar bilhetes é preciso ter conta (e-mail e palavra-passe, ou «Continuar com o Google»). Em `/account` vê «Os meus bilhetes», altera os dados e a palavra-passe, liga/desliga a newsletter e pode apagar a conta. O botão **PT | EN** troca a língua.
+0.1. **Pagar** é por **M-Pesa**: indique o número Vodacom, confirme o PIN no telemóvel e os bilhetes seguem por e-mail e ficam na conta.
 1. Abra o link do bilhete que recebeu (ou leia o QR). **Instale no ecrã inicial** se quiser.
 2. Mostra **saldo** e **QR**: o mesmo QR serve à porta e para pagar. O QR não contém o saldo.
 3. **Carregar saldo** com os atalhos ou outro valor. O saldo só aparece depois de o prestador confirmar.
 4. Sem smartphone: **bilhete impresso** (QR e código de barras) ou **pulseira/cartão NFC**, ambos ligados à mesma carteira; carregue e consulte o saldo no balcão.
-5. **Reembolso do saldo**: peça no fim do evento, se o organizador o permitir.
+5. **Código curto**: por baixo do QR há um código de 8 caracteres (por exemplo `K7QM-4TRW`) que a portaria pode digitar se o QR não ler.
+6. **Reembolso do saldo**: peça no fim do evento, se o organizador o permitir.
 
 ## Problemas frequentes
 - *A câmara não abre*: confirme a permissão no navegador e que o endereço é HTTPS.
