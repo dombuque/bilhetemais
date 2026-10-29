@@ -152,3 +152,5 @@
 .lp-nav .go .inst-nav { display: none; } @media (min-width: 960px) { .lp-nav .go .inst-nav { display: inline-flex; } }
 /* o seletor de língua tem de ver-se também no telemóvel (a regra dos botões «ghost» do menu escondia-o) */
 .lp-nav .go .langsw { display: inline-flex; } .lp-nav .go .langsw button.ghost { display: inline-flex !important; }
+/* «Baixar app»: no computador está só no menu; no telemóvel (sem esse botão no menu) está no topo da página */
+.hero-install { display: inline-flex; } @media (min-width: 960px) { .hero-install { display: none; } }

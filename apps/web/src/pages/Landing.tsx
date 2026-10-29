@@ -56,7 +56,7 @@ export function Home({ canRegister }: { canRegister: boolean }) {
               <div className="box"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Procurar eventos, locais, organizadores" aria-label="Procurar eventos" /><button type="submit">Procurar</button></div>
               <div className="lp-chips">{QUICK.map(([qs, l]) => <a key={l} href={'/events' + qs}>{l}</a>)}</div>
             </form>
-            <div className="lp-cta-row"><a className="lp-btn" href="/events"><Icon n="pin" />Explorar no mapa</a><InstallButton label="Baixar app" className="lp-btn ghost" />{canRegister && <a className="lp-btn ghost" href="/register">Registar empresa</a>}</div>
+            <div className="lp-cta-row"><a className="lp-btn" href="/events"><Icon n="pin" />Explorar no mapa</a><span className="hero-install"><InstallButton label="Baixar app" className="lp-btn ghost" /></span>{canRegister && <a className="lp-btn ghost" href="/register">Registar empresa</a>}</div>
           </div>
 
           <div className="lp-stage" aria-hidden="true">
