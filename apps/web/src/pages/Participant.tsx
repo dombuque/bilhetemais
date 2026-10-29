@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { accountApi, accountToken, dt, mt, setAccountToken } from '../api';
+import { accountApi, accountToken, dt, mainUrl, mt, onEventHost, setAccountToken } from '../api';
 import { Empty, Icon, LangSwitch, Pill, Skeleton, useAction, useToast } from '../ui';
 import './participant.css';
 
@@ -55,7 +55,7 @@ export function AuthPanel({ onDone, intro, next }: { onDone: () => void; intro?:
       <h2 className="pp-h">{mode === 'login' ? 'Entrar' : 'Criar conta'}</h2>
       <p className="pp-sub">{intro ?? 'Para comprar bilhetes precisa de uma conta. Assim os seus bilhetes ficam guardados e pode recuperá-los em qualquer telemóvel.'}</p>
       {google && <>
-        <a className="pp-google" href={`/account/google/start?next=${encodeURIComponent(back)}`}><GoogleG />Continuar com o Google</a>
+        <a className="pp-google" href={`${mainUrl()}/account/google/start?next=${encodeURIComponent(onEventHost() ? location.href : back)}`}><GoogleG />Continuar com o Google</a>
         <div className="pp-or"><span>ou</span></div>
       </>}
       {mode === 'register' && <label className="pp-field"><span>Nome</span><input value={f.name} autoComplete="name" onChange={set('name')} /></label>}

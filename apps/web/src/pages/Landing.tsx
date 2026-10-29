@@ -2,7 +2,7 @@ import { locale } from '../i18n';
 import { useAccountName } from '../accountName';
 import { useEffect, useRef, useState } from 'react';
 import './landing.css';
-import { api, mt } from '../api';
+import { api, eventUrl, mt } from '../api';
 import { Icon, LangSwitch, Qr } from '../ui';
 
 interface Ev { name: string; slug: string; startsAt: string; location: string | null; category: string | null; primary: string | null; minPriceMinor: string | null; cover: number | null }
@@ -104,7 +104,7 @@ export function Home({ canRegister }: { canRegister: boolean }) {
           ) : (
             <div className="lp-events" ref={row}>
               {events.map((e) => (
-                <a key={e.slug} href={`/e/${e.slug}`} className="ev cut">
+                <a key={e.slug} href={eventUrl(e.slug)} className="ev cut">
                   <div className="img" style={{ background: e.cover ? `center / cover url(/public/events/${e.slug}/assets/cover?v=${e.cover})` : `linear-gradient(150deg, ${e.primary ?? '#5b2eff'}, color-mix(in srgb, ${e.primary ?? '#5b2eff'} 45%, #0b0820))` }} />
                   <span className="date">{dayTag(e.startsAt)}</span>{e.category && <span className="cat">{CATS[e.category] ?? e.category}</span>}
                   <div className="info"><h3>{e.name}</h3><p>{e.location ?? 'Local a anunciar'}</p><div className="row"><b>{price(e)}</b><i>Ver e comprar</i></div></div>

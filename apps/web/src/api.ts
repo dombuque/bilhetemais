@@ -16,6 +16,16 @@ const MESSAGES: Record<string, string> = {
   MFA_REQUIRED: 'Introduza o código de verificação.',
 };
 
+/** Configuração pública (domínio base dos eventos e endereço principal), guardada ao arrancar. */
+let runtime: { baseDomain: string | null; publicUrl: string | null } = { baseDomain: null, publicUrl: null };
+export const setRuntime = (c: { baseDomain?: string | null; publicUrl?: string | null }) => { runtime = { baseDomain: c.baseDomain ?? null, publicUrl: c.publicUrl ?? null }; };
+/** Endereço de um evento: o seu subdomínio (`feira.bilhetemais.live`) quando há domínio base; senão `/e/<evento>`. */
+export const eventUrl = (slug: string) => (runtime.baseDomain ? `https://${slug}.${runtime.baseDomain}` : `${location.origin}/e/${slug}`);
+/** Endereço principal da plataforma (onde ficam o login com Google, a conta e as áreas privadas). */
+export const mainUrl = () => runtime.publicUrl ?? location.origin;
+/** Estamos num subdomínio de evento (e não no endereço principal)? */
+export const onEventHost = () => !!runtime.baseDomain && location.hostname.endsWith('.' + runtime.baseDomain);
+
 const AKEY = 'bp_account';
 export const accountToken = () => { try { return localStorage.getItem(AKEY); } catch { return null; } };
 export const setAccountToken = (t: string | null) => { try { t ? localStorage.setItem(AKEY, t) : localStorage.removeItem(AKEY); } catch { /* sem armazenamento */ } };

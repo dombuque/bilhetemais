@@ -6,6 +6,7 @@ import '@fontsource-variable/archivo/wdth.css';
 import './styles.css';
 import { BackToTop } from './ui';
 import { installTranslator } from './i18n';
+import { setRuntime } from './api';
 import { Home } from './pages/Landing';
 // cada página carrega à parte: quem abre a página inicial (ou o bilhete) não descarrega o código da equipa
 const Unsubscribe = lazy(() => import('./pages/Newsletter').then((m) => ({ default: m.Unsubscribe })));
@@ -19,7 +20,7 @@ const Staff = lazy(() => import('./pages/Staff').then((m) => ({ default: m.Staff
 
 const Discover = lazy(() => import('./pages/Discover'));
 const LogoOptions = lazy(() => import('./pages/LogoOptions'));
-export type Config = { baseDomain: string | null; simulator: boolean; selfRegistration: boolean; mpesa?: boolean; google?: boolean };
+export type Config = { baseDomain: string | null; publicUrl?: string | null; simulator: boolean; selfRegistration: boolean; mpesa?: boolean; google?: boolean };
 
 /** Em `<evento>.<dominio-base>` a raiz mostra a página pública do evento. */
 function subdomainOf(host: string, base: string | null) {
@@ -30,7 +31,7 @@ function subdomainOf(host: string, base: string | null) {
 
 function App() {
   const [cfg, setCfg] = useState<Config | null>(null);
-  useEffect(() => { fetch('/public/config').then((r) => r.json()).then(setCfg).catch(() => setCfg({ baseDomain: null, simulator: false, selfRegistration: false })); }, []);
+  useEffect(() => { fetch('/public/config').then((r) => r.json()).then((c) => { setRuntime(c); setCfg(c); }).catch(() => setCfg({ baseDomain: null, simulator: false, selfRegistration: false })); }, []);
   if (!cfg) return null;
 
   // endereços antigos (em português) continuam a funcionar e passam para os novos, em inglês
@@ -38,6 +39,8 @@ function App() {
   for (const [re, to] of legacy) if (re.test(location.pathname)) { location.replace(location.pathname.replace(re, to) + location.search); return null; }
   const path = location.pathname;
   const sub = subdomainOf(location.hostname, cfg.baseDomain);
+  // as áreas privadas ficam só no endereço principal: num subdomínio de evento voltam para lá
+  if (sub && /^\/(platform|company)(\/|$)/.test(path) && cfg.publicUrl) { location.replace(cfg.publicUrl + path); return null; }
   let m: RegExpExecArray | null;
   if ((m = /^\/e\/([a-z0-9-]+)$/.exec(path))) return <PublicEvent slug={m[1]} cfg={cfg} />;
   if ((m = /^\/o\/([0-9a-f-]{36})$/.exec(path))) return <Order id={m[1]} cfg={cfg} />;

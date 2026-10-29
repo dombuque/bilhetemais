@@ -52,6 +52,7 @@ beforeAll(async () => {
   await db.query(`INSERT INTO users(email,name,password_hash,role) VALUES('root@bilhete.test','Root',$1,'PLATFORM_ADMIN')`, [hashPassword('pw123456')]);
   appInst = createApp(db, { tokenSecret: 'secret-test', webhookSecret: WEBHOOK_SECRET, selfRegistration: true,
     publicUrl: 'https://bilhete.test',
+    baseDomain: 'bilhete.test',
     google: { clientId: 'cid', clientSecret: 'sec', exchange: async (code: string) => { const p = googleStub[code]; if (!p) throw new Error('código recusado'); return p; } },
     mpesa: {
       charge: async (p: any) => { mpesaStub.calls.push(p); const n = mpesaStub.next.shift(); return typeof n === 'function' ? n() : n ?? { outcome: 'SUCCESS', code: 'INS-0', message: 'ok', transactionId: 'TX-' + mpesaStub.calls.length }; },
@@ -737,6 +738,14 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     const s5 = await start('//evil.test');
     googleStub.c3 = { sub: 'g-3', email: 'tres@gmail.com', emailVerified: true, name: 'Tres' };
     expect((await raw(`/account/google/callback?code=c3&state=${s5.state}`, s5.cookie)).headers.get('location')).toMatch(/&next=%2Faccount$/);
+    // a partir de um evento (subdomínio do domínio base) a sessão volta ao próprio subdomínio; de sítios de terceiros, nunca
+    const sEv = await start('https://feira.bilhete.test/e/feira?x=1');
+    googleStub.c5 = { sub: 'g-5', email: 'cinco@gmail.com', emailVerified: true, name: 'Cinco' };
+    expect((await raw(`/account/google/callback?code=c5&state=${sEv.state}`, sEv.cookie)).headers.get('location')).toMatch(/^https:\/\/feira\.bilhete\.test\/account#t=[\w-]+&next=%2Fe%2Ffeira%3Fx%3D1$/);
+    const sBad = await start('https://evil.test/e/x');
+    expect((await raw(`/account/google/callback?code=c5&state=${sBad.state}`, sBad.cookie)).headers.get('location')).toMatch(/^\/account#t=[\w-]+&next=%2Faccount$/);
+    const sBad2 = await start('https://bilhete.test.evil.test/');
+    expect((await raw(`/account/google/callback?code=c5&state=${sBad2.state}`, sBad2.cookie)).headers.get('location')).toMatch(/^\/account#t=/);
     // alguém registou o e-mail de outra pessoa com palavra-passe (sem o confirmar): quando o dono entra com Google, a palavra-passe do intruso deixa de valer
     await call('POST', '/account/register', { name: 'Intruso', email: 'vitima@gmail.com', password: 'pw-intruso-123' });
     const intruder = (await call('POST', '/account/login', { email: 'vitima@gmail.com', password: 'pw-intruso-123' })).body.token;

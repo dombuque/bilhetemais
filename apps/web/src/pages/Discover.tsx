@@ -1,6 +1,6 @@
 import { locale } from '../i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api, mt } from '../api';
+import { api, eventUrl, mt } from '../api';
 import { fmtDist, googleDirections, km, loadMapLibre, MAP_STYLE, MAPUTO, userDot, wazeDirections, webglOk, type MLMap } from '../map/mapkit';
 import { Icon } from '../ui';
 
@@ -119,7 +119,7 @@ export default function Discover() {
   useEffect(() => { markers.current.forEach((mk, slug) => mk.getElement().classList.toggle('on', slug === selected)); }, [selected]);
   useEffect(() => { markers.current.forEach((mk, slug) => mk.getElement().classList.toggle('hover', slug === hover)); }, [hover]);
   /** Tocar no cartão abre o evento (Ctrl/Cmd+clique abre noutro separador). */
-  const open = (slug: string, e: { metaKey?: boolean; ctrlKey?: boolean }) => (e.metaKey || e.ctrlKey ? window.open(`/e/${slug}`, '_blank') : location.assign(`/e/${slug}`));
+  const open = (slug: string, e: { metaKey?: boolean; ctrlKey?: boolean }) => (e.metaKey || e.ctrlKey ? window.open(eventUrl(slug), '_blank') : location.assign(eventUrl(slug)));
 
   const sel = sorted.find((i) => i.slug === selected) ?? null;
   const flyTo = useCallback((lat: number, lng: number, zoom = 14.5) => map.current?.flyTo({ center: [lng, lat], zoom, duration: 700, padding: { bottom: window.innerWidth < 960 ? 220 : 0, left: window.innerWidth >= 960 ? 420 : 0, top: 0, right: 0 } }), []);

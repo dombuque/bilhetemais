@@ -15,7 +15,7 @@ type Role = 'PLATFORM_ADMIN' | 'ORG_ADMIN' | 'CASHIER' | 'MERCHANT_OPERATOR' | '
 interface User { orgStatus: string | null; id: string; organization_id: string | null; merchant_id: string | null; role: Role; name: string }
 type Req = Request<Record<string, string>> & { user?: User; rawBody?: Buffer };
 
-const RESERVED = new Set(['www', 'api', 'app', 'admin', 'mail', 'ftp', 'static', 'cdn', 'pos', 'staging']);
+const RESERVED = new Set(['www', 'api', 'app', 'admin', 'mail', 'ftp', 'static', 'cdn', 'pos', 'staging', 'platform', 'company', 'account', 'events', 'register', 'login', 'staff', 'webhooks', 'public', 'auth', 'smtp', 'imap', 'ns1', 'ns2', 'status', 'help', 'support', 'blog', 'docs', 'dev', 'test', 'demo', 'bilhete', 'bilhetemais']);
 const SESSION_HOURS = 12;
 
 export interface AppConfig {
@@ -444,7 +444,18 @@ export function createApp(db: Db, cfg: AppConfig) {
   };
   // ---------- entrada com Google ----------
   const googleRedirect = () => `${(cfg.publicUrl ?? '').replace(/\/$/, '')}/account/google/callback`;
-  const safeNext = (v: unknown) => (typeof v === 'string' && /^\/(?!\/)[\w\-./?=&%#]*$/.test(v) && v.length <= 200 ? v : '/account');
+  const safeNext = (v: unknown) => {
+    if (typeof v !== 'string' || v.length > 300) return '/account';
+    if (/^\/(?!\/)[\w\-./?=&%#]*$/.test(v)) return v;
+    // endereço completo só se for do nosso domínio base (um evento): nunca para sítios de terceiros
+    if (cfg.baseDomain) {
+      try {
+        const u = new URL(v);
+        if (u.protocol === 'https:' && (u.hostname === cfg.baseDomain || u.hostname.endsWith('.' + cfg.baseDomain)) && !u.username && !u.password) return u.origin + u.pathname + u.search;
+      } catch { /* endereço inválido */ }
+    }
+    return '/account';
+  };
   const cookieOf = (req: Request, name: string) => new RegExp(`(?:^|; )${name}=([^;]+)`).exec(req.headers.cookie ?? '')?.[1] ?? null;
   const secureCookie = (cfg.publicUrl ?? '').startsWith('https://');
   app.get('/account/google/start', limit(cfg.loginRateLimit), h(async (req, res) => {
@@ -492,7 +503,9 @@ export function createApp(db: Db, cfg: AppConfig) {
     const token = await accountSession(accountId);
     res.setHeader('Set-Cookie', 'bp_oauth=; Path=/account/google; Max-Age=0');
     // o token vai no fragmento (#): não chega a servidores nem a registos
-    res.redirect(302, `/account#t=${token}&next=${encodeURIComponent(st.next)}`);
+    // a sessão volta ao endereço de onde a pessoa veio (o de um evento, com o seu subdomínio, ou o principal)
+    if (/^https:\/\//.test(st.next)) { const u = new URL(st.next); res.redirect(302, `${u.origin}/account#t=${token}&next=${encodeURIComponent(u.pathname + u.search)}`); }
+    else res.redirect(302, `/account#t=${token}&next=${encodeURIComponent(st.next)}`);
     return undefined;
   }));
 
@@ -967,7 +980,7 @@ export function createApp(db: Db, cfg: AppConfig) {
   }));
 
   // ---------- leitura para a interface ----------
-  app.get('/public/config', h(async () => ({ baseDomain: cfg.baseDomain ?? null, simulator: !!cfg.simulator, selfRegistration: !!cfg.selfRegistration, mpesa: !!cfg.mpesa, google: !!cfg.google })));
+  app.get('/public/config', h(async () => ({ baseDomain: cfg.baseDomain ?? null, publicUrl: cfg.publicUrl ?? null, simulator: !!cfg.simulator, selfRegistration: !!cfg.selfRegistration, mpesa: !!cfg.mpesa, google: !!cfg.google })));
   /** Só sandbox: equivale a um webhook de sucesso do prestador. */
   app.post('/public/simulate-payment', h(async (req) => {
     if (!cfg.simulator) throw new HttpError(404, 'indisponível');
