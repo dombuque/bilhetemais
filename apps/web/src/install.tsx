@@ -5,20 +5,27 @@ import { Icon, Modal } from './ui';
 interface InstallEvent extends Event { prompt(): Promise<void>; userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }> }
 let deferred: InstallEvent | null = null;
 const listeners = new Set<() => void>();
+const FLAG = 'bp_app_installed';
+const flagged = () => { try { return localStorage.getItem(FLAG) === '1'; } catch { return false; } };
+const setFlag = () => { try { localStorage.setItem(FLAG, '1'); } catch { /* sem armazenamento */ } };
+let related = false; // o navegador diz que a app já está instalada neste aparelho (Chrome/Edge no Android)
 export function captureInstallPrompt() {
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferred = e as InstallEvent; listeners.forEach((l) => l()); });
-  window.addEventListener('appinstalled', () => { deferred = null; listeners.forEach((l) => l()); });
+  window.addEventListener('appinstalled', () => { deferred = null; setFlag(); listeners.forEach((l) => l()); });
+  if (isStandalone()) setFlag(); // aberta como app: fica registado para o navegador também o saber
+  (navigator as any).getInstalledRelatedApps?.().then((apps: unknown[]) => { if (apps?.length) { related = true; setFlag(); listeners.forEach((l) => l()); } }).catch(() => {});
 }
 
 /** A correr como app instalada (sem barra do navegador)? */
-export const isStandalone = () =>
-  window.matchMedia?.('(display-mode: standalone)').matches || (navigator as any).standalone === true;
+export function isStandalone() {
+  return !!window.matchMedia?.('(display-mode: standalone)').matches || (navigator as any).standalone === true;
+}
 const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 export function useInstall() {
   const [, tick] = useState(0);
   useEffect(() => { const l = () => tick((n) => n + 1); listeners.add(l); return () => { listeners.delete(l); }; }, []);
-  return { installed: isStandalone(), canPrompt: !!deferred, ios: isIOS(), prompt: async () => { if (!deferred) return false; await deferred.prompt(); const r = await deferred.userChoice; deferred = null; listeners.forEach((l) => l()); return r.outcome === 'accepted'; } };
+  return { installed: isStandalone() || related || flagged(), canPrompt: !!deferred, ios: isIOS(), prompt: async () => { if (!deferred) return false; await deferred.prompt(); const r = await deferred.userChoice; deferred = null; listeners.forEach((l) => l()); return r.outcome === 'accepted'; } };
 }
 
 /** Botão «Instalar app»: instala com um toque onde o navegador deixa; no iPhone/iPad e noutros mostra os passos. Some quando já está instalada. */
@@ -42,7 +49,7 @@ export function InstallButton({ label = 'Baixar app', className = 'lp-btn ghost 
 }
 
 const DISMISS = 'bp_install_dismissed';
-/** Convite discreto, só no telemóvel e só no endereço geral: «Instale a app». Fecha-se e não volta durante 14 dias. */
+/** Barra fixa em baixo, só no telemóvel e só se o aparelho ainda NÃO tem a app: «Instale a app». Fecha-se e não volta durante 14 dias. */
 export function InstallBanner() {
   const inst = useInstall();
   const [hidden, setHidden] = useState(() => { try { return Date.now() - Number(localStorage.getItem(DISMISS) ?? 0) < 14 * 864e5; } catch { return false; } });

@@ -7,7 +7,7 @@ import './styles.css';
 import { BackToTop } from './ui';
 import { installTranslator } from './i18n';
 import { setRuntime } from './api';
-import { captureInstallPrompt } from './install';
+import { captureInstallPrompt, InstallBanner } from './install';
 import { Home } from './pages/Landing';
 // cada página carrega à parte: quem abre a página inicial (ou o bilhete) não descarrega o código da equipa
 const Unsubscribe = lazy(() => import('./pages/Newsletter').then((m) => ({ default: m.Unsubscribe })));
@@ -62,5 +62,5 @@ function App() {
 
 captureInstallPrompt();
 installTranslator();
-createRoot(document.getElementById('root')!).render(<StrictMode><Suspense fallback={null}><App /></Suspense>{location.pathname !== '/events' && <BackToTop />}</StrictMode>);
+createRoot(document.getElementById('root')!).render(<StrictMode><Suspense fallback={null}><App /></Suspense>{location.pathname !== '/events' && <BackToTop />}{!/^\/(platform|company|staff)(\/|$)/.test(location.pathname) && <InstallBanner />}</StrictMode>);
 if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('/sw.js').catch(() => {});

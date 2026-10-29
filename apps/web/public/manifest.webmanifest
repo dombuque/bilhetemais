@@ -74,5 +74,12 @@
         }
       ]
     }
-  ]
+  ],
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "https://bilhetemais.live/manifest.webmanifest"
+    }
+  ],
+  "prefer_related_applications": false
 }
