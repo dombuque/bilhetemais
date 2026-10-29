@@ -1,6 +1,6 @@
 import { locale } from '../i18n';
 import { useAccountName } from '../accountName';
-import { InstallButton } from '../install';
+import { InstallBanner, InstallButton } from '../install';
 import { useEffect, useRef, useState } from 'react';
 import './landing.css';
 import { api, eventUrl, mt } from '../api';
@@ -160,6 +160,7 @@ export function Home({ canRegister }: { canRegister: boolean }) {
         </div>
       </section>
 
+      <InstallBanner />
       <footer className="lp-foot">
         <div className="lp-wrap">
           <div className="row"><span>© Bilhete+ · Moçambique</span><span><a href="/events">Eventos</a></span></div>

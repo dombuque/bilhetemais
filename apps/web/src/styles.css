@@ -391,3 +391,7 @@ body:has(.shell) { background: #f4f2ee; }
 .install-steps { padding-left: 20px; display: grid; gap: 10px; margin: 8px 0 0; }
 .side-install { display: block; margin-top: 10px; } .side-install button { width: 100%; justify-content: flex-start; }
 .shell .side .who .side-install button { background: transparent; color: #fff; border: 1.5px solid rgb(255 255 255 / .4); clip-path: none; } .shell .side .who .side-install button:hover:not(:disabled) { background: #5ce1ff; color: #0b0820; }
+.install-banner { position: fixed; left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 70; display: none; align-items: center; gap: 12px; padding: 10px 10px 10px 12px; background: #0b0820; color: #fff; box-shadow: 0 14px 40px rgb(0 0 0 / .4); clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%); }
+@media (max-width: 899px) { .install-banner { display: flex; } }
+.install-banner img { border-radius: 10px; flex: none; } .install-banner div { flex: 1; min-width: 0; display: grid; } .install-banner b { font: 800 .95rem var(--font-display); } .install-banner small { color: #c9c6e2; font-size: .75rem; }
+.install-banner .ib-go { background: #5ce1ff; color: #0b0820; border: 0; min-height: 40px; padding: 0 16px; font: 800 .8rem var(--font-display); text-transform: uppercase; cursor: pointer; border-radius: 0; box-shadow: none; flex: none; } .install-banner .ib-x { background: transparent; color: #c9c6e2; border: 0; min-height: 40px; width: 36px; padding: 0; box-shadow: none; flex: none; }

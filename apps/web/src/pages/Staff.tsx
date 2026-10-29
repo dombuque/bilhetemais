@@ -73,13 +73,16 @@ export function Staff({ orgSlug, area, cfg }: { orgSlug?: string; area?: 'platfo
   const [org, setOrg] = useState<OrgArea | null | undefined>(orgSlug ? undefined : null);
   useEffect(() => { if (orgSlug) api('GET', `/public/org/${orgSlug}`).then(setOrg).catch(() => setOrg(null)); }, [orgSlug]);
   // a app instalável da equipa: o manifesto traz o nome e o endereço da área (empresa ou plataforma)
+  // Só se oferece a instalação da app da equipa DEPOIS de entrar (dentro do perfil). Na página de entrada não há manifesto
+  // (nem a app pública se pode instalar a partir daqui); a app do público instala-se pelo endereço geral.
   useEffect(() => {
-    const href = area === 'platform' ? '/platform/manifest.webmanifest' : orgSlug ? `/company/${orgSlug}/manifest.webmanifest` : null;
     const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-    if (!href || !link) return;
-    const before = link.href; link.href = href;
-    return () => { link.href = before; };
-  }, [orgSlug, area]);
+    if (!link) return;
+    const before = link.getAttribute('href') ?? '/manifest.webmanifest';
+    const href = area === 'platform' ? '/platform/manifest.webmanifest' : orgSlug ? `/company/${orgSlug}/manifest.webmanifest` : null;
+    if (me && href) link.setAttribute('href', href); else link.removeAttribute('href');
+    return () => { link.setAttribute('href', before); };
+  }, [orgSlug, area, !!me]); // eslint-disable-line react-hooks/exhaustive-deps
   const load = () => {
     if (!getToken()) return setMe(null);
     api('GET', '/me').then((m) => {

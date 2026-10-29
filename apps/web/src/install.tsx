@@ -40,3 +40,25 @@ export function InstallButton({ label = 'Baixar app', className = 'lp-btn ghost 
     </>
   );
 }
+
+const DISMISS = 'bp_install_dismissed';
+/** Convite discreto, só no telemóvel e só no endereço geral: «Instale a app». Fecha-se e não volta durante 14 dias. */
+export function InstallBanner() {
+  const inst = useInstall();
+  const [hidden, setHidden] = useState(() => { try { return Date.now() - Number(localStorage.getItem(DISMISS) ?? 0) < 14 * 864e5; } catch { return false; } });
+  const [help, setHelp] = useState(false);
+  if (inst.installed || hidden || !(inst.canPrompt || inst.ios)) return null;
+  const close = () => { try { localStorage.setItem(DISMISS, String(Date.now())); } catch { /* sem armazenamento */ } setHidden(true); };
+  return (
+    <div className="install-banner" role="region" aria-label="Instalar a app">
+      <img src="/icon-192.png" alt="" width="44" height="44" />
+      <div><b>Bilhete+ no seu telemóvel</b><small>Eventos e bilhetes sempre à mão, em ecrã inteiro.</small></div>
+      <button type="button" className="ib-go" onClick={async () => { if (inst.canPrompt) { await inst.prompt(); close(); } else setHelp(true); }}>Instalar</button>
+      <button type="button" className="ib-x" aria-label="Fechar" onClick={close}><Icon n="x" /></button>
+      {help && (
+        <Modal title="Instalar a app Bilhete+" onClose={() => setHelp(false)}>
+          <ol className="install-steps"><li>Abra esta página no <b>Safari</b>.</li><li>Toque em <b>Partilhar</b> <span aria-hidden="true">⬆️</span>.</li><li>Escolha <b>«Adicionar ao ecrã principal»</b> e confirme.</li></ol>
+        </Modal>)}
+    </div>
+  );
+}
