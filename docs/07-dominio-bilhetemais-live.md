@@ -70,3 +70,9 @@ Depois `systemctl restart bilheteplus`. Na consola da Google (credenciais OAuth)
 - Eventos **não publicados** (rascunho) respondem «não encontrado» no seu subdomínio.
 - O domínio antigo `bilhetemais.semfila.online` pode continuar a funcionar em paralelo durante a transição (sem subdomínios por evento).
 - Os e-mails (bilhetes, newsletter) usam `PUBLIC_URL` nas ligações: mude-o só quando `bilhetemais.live` estiver a responder.
+
+## Estado (29/10/2026)
+- DNS (`@` e `*`) na Cloudflare, só DNS; certificado curinga emitido por DNS-01 (válido até 27/01/2027, renovação automática com recarga do nginx);
+  token da Cloudflare restrito à zona `bilhetemais.live` em `/root/.secrets-bilhetemais-cf.ini` (permissões 600) — serve só para renovar.
+- `BASE_DOMAIN=bilhetemais.live` e `PUBLIC_URL=https://bilhetemais.live` em produção; nginx em `/etc/nginx/sites-available/bilhetemais_live`.
+- Verificado: `https://<evento>.bilhetemais.live` abre a página do evento com o seu tema; o domínio antigo `bilhetemais.semfila.online` continua a responder.
