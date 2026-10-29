@@ -2,7 +2,7 @@
 // - /assets/* tem hash no nome: cache primeiro (nunca muda).
 // - o resto (logótipo, ícones, manifesto): rede primeiro, com a cache só como recurso se não houver rede.
 // - navegações: rede primeiro; offline mostra a última página guardada.
-const SHELL = 'bilheteplus-shell-v6';
+const SHELL = 'bilheteplus-shell-v7';
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(SHELL).then((c) => c.addAll(['/']))); self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== SHELL).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
@@ -13,13 +13,15 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || url.origin !== location.origin || API.test(url.pathname)) return;
   const put = (r) => { const copy = r.clone(); caches.open(SHELL).then((c) => c.put(e.request, copy)); return r; };
   if (e.request.mode === 'navigate') {
-    // a app abre logo a partir da memória (o ecrã é sempre o mesmo) e a versão nova chega por trás
+    // rede primeiro (a versão nova aparece logo); se a rede demorar mais de 1,5 s ou falhar, abre-se o ecrã guardado
     e.respondWith((async () => {
       const cache = await caches.open(SHELL);
-      const cached = await cache.match('/');
       const network = fetch(e.request).then((r) => { if (r.ok && r.headers.get('content-type')?.includes('text/html')) cache.put('/', r.clone()); return r; });
-      if (cached) { e.waitUntil(network.catch(() => {})); return cached; }
-      return network.catch(() => caches.match('/'));
+      const cached = await cache.match('/');
+      if (!cached) return network.catch(() => caches.match('/'));
+      const slow = new Promise((res) => setTimeout(() => res(cached), 1500));
+      e.waitUntil(network.catch(() => {}));
+      return Promise.race([network.catch(() => cached), slow]);
     })());
     return;
   }
