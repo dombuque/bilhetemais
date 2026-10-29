@@ -415,3 +415,5 @@ html { height: 100%; } body { min-height: 100%; }
 .map-search { background: #fff !important; color: #0b0820 !important; box-shadow: 0 6px 24px rgb(11 8 32 / .28), 0 0 0 1px rgb(11 8 32 / .06) !important; }
 .map-search input { color: #0b0820 !important; -webkit-text-fill-color: #0b0820; } .map-search input::placeholder { color: #6b6885; opacity: 1; }
 .map-chips button { box-shadow: 0 2px 10px rgb(11 8 32 / .2); }
+/* entrada da equipa no telemóvel: só o formulário (o painel de apresentação ocupava o primeiro ecrã) */
+@media (max-width: 860px) { .login .brandpane { display: none !important; } .login .formpane { min-height: 100svh; align-content: start; padding-top: 28px; } }

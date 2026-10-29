@@ -154,3 +154,4 @@
 .lp-nav .go .langsw { display: inline-flex; } .lp-nav .go .langsw button.ghost { display: inline-flex !important; }
 /* «Baixar app»: no computador está só no menu; no telemóvel (sem esse botão no menu) está no topo da página */
 .hero-install { display: inline-flex; } @media (min-width: 960px) { .hero-install { display: none; } }
+.lp-nav > a:first-child { flex: none; } .lp-nav > a:first-child img { height: 30px; width: auto; max-width: none; }
