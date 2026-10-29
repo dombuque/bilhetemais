@@ -822,6 +822,48 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     expect((await call('GET', `/public/tickets/${t1.token}`)).body.ticketStatus).toBe('REVOKED');
   });
 
+  it('endereço curto do evento: sugerido pelo nome, verificado, nunca duplicado nem reservado', async () => {
+    const mk = (sub?: string, name = 'Festival Curto') => call('POST', '/events', { name, startsAt: '2031-05-01T10:00:00Z', endsAt: '2031-05-01T22:00:00Z', ...(sub ? { subdomain: sub } : {}) }, S.adminA);
+    const check = async (q: string) => (await call('GET', `/events/subdomain-check?q=${encodeURIComponent(q)}`, undefined, S.adminA)).body;
+    expect((await call('GET', '/events/subdomain-check?q=x', undefined, S.gate)).status).toBe(403);
+    expect(await check('Meu Evento Único!')).toMatchObject({ slug: 'meu-evento-unico', available: true });
+    expect(await check('ab')).toMatchObject({ available: false, reason: 'curto' });
+    expect(await check('admin')).toMatchObject({ available: false, reason: 'reservado', suggestion: expect.stringMatching(/^admin-evento(-\d+)?$/) });
+    expect(await check('platform')).toMatchObject({ available: false, reason: 'reservado' });
+    // escolher um endereço livre funciona e passa a estar em uso
+    const first = await mk('meu-evento-unico');
+    expect(first.status).toBe(200);
+    expect(first.body.subdomain).toBe('meu-evento-unico');
+    const again = await check('meu-evento-unico');
+    expect(again).toMatchObject({ available: false, reason: 'em uso', suggestion: 'meu-evento-unico-2' });
+    // um endereço escolhido nunca é alterado em silêncio: ocupado, reservado ou curto demais são recusados
+    expect((await mk('meu-evento-unico')).status).toBe(409);
+    expect((await call('POST', '/events', { name: 'Outro', startsAt: '2031-05-01T10:00:00Z', endsAt: '2031-05-01T22:00:00Z', subdomain: 'meu-evento-unico' }, S.adminB)).status).toBe(409); // nem de outra empresa
+    expect((await mk('admin')).status).toBe(409);
+    expect((await mk('ab')).status).toBe(409);
+    // sem endereço escolhido, o sistema gera um a partir do nome e evita duplicados
+    const auto1 = await mk(undefined, 'Noite do Fado');
+    const auto2 = await mk(undefined, 'Noite do Fado');
+    expect(auto1.body.subdomain).toBe('noite-do-fado');
+    expect(auto2.body.subdomain).toBe('noite-do-fado-2');
+    expect(await check('noite-do-fado')).toMatchObject({ available: false, suggestion: 'noite-do-fado-3' });
+  });
+
+  it('evento terminado: já não vende bilhetes nem aceita pagar encomendas pendentes', async () => {
+    const ev = (await call('POST', '/events', { name: 'Evento Que Acaba', startsAt: '2031-06-01T10:00:00Z', endsAt: '2031-06-01T22:00:00Z' }, S.adminA)).body;
+    await call('POST', `/events/${ev.id}/publish`, {}, S.adminA);
+    const tt = (await call('POST', `/events/${ev.id}/ticket-types`, { name: 'Geral', priceMinor: MT(100), quantity: 10 }, S.adminA)).body.id;
+    const order = { items: [{ ticketTypeId: tt, qty: 1 }] };
+    const pending = await buyTicket(ev.subdomain, order);
+    expect(pending.status).toBe(200); // antes do fim, compra-se
+    await db.query(`UPDATE events SET starts_at=now()-interval '2 days', ends_at=now()-interval '1 day' WHERE id=$1`, [ev.id]);
+    const late = await buyTicket(ev.subdomain, order);
+    expect(late.status).toBe(409);
+    expect(late.body.error).toMatch(/já terminou/);
+    expect((await call('POST', `/public/orders/${pending.body.orderId}/pay`, { phone: '84 123 4567' })).status).toBe(409); // nem pagar a encomenda que ficou por pagar
+    expect((await db.query<any>('SELECT count(*)::int AS c FROM ticket_orders WHERE event_id=$1', [ev.id])).rows[0].c).toBe(1); // a recusada não deixou nada
+  });
+
   it('backoffices separados: a área /platform é só da Bilhete+ e cada empresa entra pela sua', async () => {
     const asPlatform = (email: string) => call('POST', '/auth/login', { email, password: 'pw123456', area: 'platform' });
     expect((await asPlatform('root@bilhete.test')).status).toBe(200);

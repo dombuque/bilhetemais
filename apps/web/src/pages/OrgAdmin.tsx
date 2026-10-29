@@ -71,14 +71,30 @@ function Events({ onOpen, toast }: { onOpen: (id: string) => void; toast: Toast 
 
 function NewEvent({ events, toast, onClose, onCreated }: { events: any[]; toast: Toast; onClose: () => void; onCreated: (id: string) => void }) {
   const [f, setF] = useState({ name: '', startsAt: '', endsAt: '', location: '', description: '', category: '' });
+  const [sub, setSub] = useState('');            // endereço curto escolhido (vazio = acompanha o nome)
+  const [subEdited, setSubEdited] = useState(false);
+  const [chk, setChk] = useState<{ slug: string; available: boolean; reason: string | null; suggestion: string | null } | null>(null);
   const [from, setFrom] = useState('');
   const [inherit, setInherit] = useState(true);
   const [copy, setCopy] = useState<string[]>(['ticketTypes', 'gates']);
   const { busy, run } = useAction(toast);
+  // o endereço sugere-se a partir do nome, a menos que a pessoa o tenha escrito; verifica-se se está livre
+  useEffect(() => { if (!subEdited) setSub(f.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30)); }, [f.name, subEdited]);
+  useEffect(() => {
+    if (!sub) { setChk(null); return; }
+    const t = setTimeout(() => api('GET', `/events/subdomain-check?q=${encodeURIComponent(sub)}`).then(setChk).catch(() => setChk(null)), 300);
+    return () => clearTimeout(t);
+  }, [sub]);
   const toggle = (k: string) => setCopy((c) => (c.includes(k) ? c.filter((x) => x !== k) : [...c, k]));
   return (
     <Modal title="Novo evento" onClose={onClose}>
       <Field label="Nome"><input value={f.name} autoFocus onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
+      <Field label="Endereço curto do evento" hint="Será o endereço público do evento. Só letras, números e hífens; tem de ser único.">
+        <div className="sub-input"><input value={sub} maxLength={36} autoCapitalize="off" spellCheck={false} placeholder="feira-de-maputo" onChange={(e) => { setSubEdited(true); setSub(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')); }} /><span className="mono">.{location.hostname.split('.').slice(-2).join('.')}</span></div>
+      </Field>
+      {sub && chk && (chk.available
+        ? <p className="sub-ok" role="status"><Icon n="check" /> <b>{chk.slug}</b> está livre</p>
+        : <p className="sub-bad" role="alert">{chk.reason === 'curto' ? 'Use pelo menos 3 letras ou números.' : chk.reason === 'reservado' ? 'Este endereço é reservado.' : 'Este endereço já está em uso.'}{chk.suggestion && <> Sugestão: <button type="button" className="ghost sm" onClick={() => { setSubEdited(true); setSub(chk.suggestion!); }}>{chk.suggestion}</button></>}</p>)}
       <div className="field-row">
         <Field label="Início"><input type="datetime-local" value={f.startsAt} onChange={(e) => setF({ ...f, startsAt: e.target.value })} /></Field>
         <Field label="Fim"><input type="datetime-local" value={f.endsAt} onChange={(e) => setF({ ...f, endsAt: e.target.value })} /></Field>
@@ -95,8 +111,8 @@ function NewEvent({ events, toast, onClose, onCreated }: { events: any[]; toast:
           </>}
         </div>
       )}
-      <button className="big wide" disabled={busy || !f.name || !f.startsAt || !f.endsAt} onClick={() => run(async () => {
-        const r = await api('POST', '/events', { ...f, startsAt: new Date(f.startsAt).toISOString(), endsAt: new Date(f.endsAt).toISOString(), ...(from ? { inheritFrom: from, inherit, copy } : {}) });
+      <button className="big wide" disabled={busy || !f.name || !f.startsAt || !f.endsAt || (!!sub && chk !== null && !chk.available)} onClick={() => run(async () => {
+        const r = await api('POST', '/events', { ...f, ...(sub ? { subdomain: sub } : {}), startsAt: new Date(f.startsAt).toISOString(), endsAt: new Date(f.endsAt).toISOString(), ...(from ? { inheritFrom: from, inherit, copy } : {}) });
         onCreated(r.id);
       }, 'Evento criado')}>Criar evento</button>
     </Modal>

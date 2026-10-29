@@ -62,6 +62,7 @@ export function PublicEvent({ slug, cfg }: { slug: string; cfg: Config }) {
   const count = items.reduce((s, i) => s + i.qty, 0);
   const total = ev.ticketTypes.reduce((s: bigint, t: any) => s + BigInt(t.price_minor) * BigInt(qty[t.id] ?? 0), 0n);
   const cta = ev.theme.ctaLabel || 'Comprar';
+  const ended = new Date(ev.endsAt) < new Date(); // evento terminado: sem compras e sem calendário
   const buy = () => run(async () => {
     try {
       const o = await accountApi('POST', `/public/events/${slug}/orders`, { items });
@@ -81,7 +82,7 @@ export function PublicEvent({ slug, cfg }: { slug: string; cfg: Config }) {
         <div className="chips-row"><span className="chip"><Icon n="calendar" />{day}</span>{ev.location && <span className="chip"><Icon n="pin" />{ev.location}</span>}</div>
         <Countdown startsAt={ev.startsAt} endsAt={ev.endsAt} />
       </Cover>}
-      bar={count > 0 && !checkout && (
+      bar={!ended && count > 0 && !checkout && (
         <div className="sticky-bar mobile-only"><div className="in"><div><b>{count} bilhete{count > 1 ? 's' : ''}</b><div className="muted small">{mt(total)}</div></div><button className="big" onClick={() => setCheckout(true)}>{cta}<Icon n="arrowright" /></button></div></div>
       )}>
       <div className="pub-layout">
@@ -89,7 +90,8 @@ export function PublicEvent({ slug, cfg }: { slug: string; cfg: Config }) {
           <section className="stub" id="bilhetes">
             <div className="top">
               <div className="between"><h2>{ev.settings.ticketCategories === 'single' ? 'Entrada' : 'Bilhetes'}</h2><span className="eyebrow">Em meticais</span></div>
-              {!ev.settings.onlineSalesEnabled && <p className="muted" style={{ marginTop: 10 }}>A venda online está encerrada. Adquira o seu bilhete nos balcões do evento.</p>}
+              {ended && <p className="muted" style={{ marginTop: 10 }}>O evento já terminou. Já não é possível comprar bilhetes.</p>}
+              {!ended && !ev.settings.onlineSalesEnabled && <p className="muted" style={{ marginTop: 10 }}>A venda online está encerrada. Adquira o seu bilhete nos balcões do evento.</p>}
               {ev.ticketTypes.length === 0 && <Empty icon="ticket">Os bilhetes ainda não estão à venda.</Empty>}
               {ev.ticketTypes.map((t: any) => (
                 <div key={t.id} className="ticket-row">
@@ -97,7 +99,7 @@ export function PublicEvent({ slug, cfg }: { slug: string; cfg: Config }) {
                     <div className="muted small">{t.available > 0 ? (t.available <= 10 ? `Restam ${t.available}` : 'Disponível') : 'Esgotado'}</div></div>
                   <div className="inline" style={{ gap: 12 }}>
                     <span className="price">{BigInt(t.price_minor) === 0n ? 'Grátis' : mt(t.price_minor)}</span>
-                    {t.available > 0 && ev.settings.onlineSalesEnabled ? <Stepper label={`Quantidade ${t.name}`} value={qty[t.id] ?? 0} max={Math.max(0, Math.min(ev.settings.maxTicketsPerOrder - (count - (qty[t.id] ?? 0)), t.available))} onChange={(n) => setQty({ ...qty, [t.id]: n })} /> : <Pill s="CLOSED" />}
+                    {!ended && t.available > 0 && ev.settings.onlineSalesEnabled ? <Stepper label={`Quantidade ${t.name}`} value={qty[t.id] ?? 0} max={Math.max(0, Math.min(ev.settings.maxTicketsPerOrder - (count - (qty[t.id] ?? 0)), t.available))} onChange={(n) => setQty({ ...qty, [t.id]: n })} /> : <Pill s="CLOSED" />}
                   </div>
                 </div>
               ))}
@@ -105,10 +107,10 @@ export function PublicEvent({ slug, cfg }: { slug: string; cfg: Config }) {
             <div className="perf" />
             <div className="bottom stack-sm">
               <div className="between"><span className="muted">{count ? `${count} bilhete${count > 1 ? 's' : ''}` : 'Escolha os bilhetes'}</span><b className="price" style={{ fontSize: '1.3rem' }}>{mt(total)}</b></div>
-              {!checkout && <button className="big wide desktop-only" disabled={!count} onClick={() => setCheckout(true)}>{cta}<Icon n="arrowright" /></button>}
+              {!ended && !checkout && <button className="big wide desktop-only" disabled={!count} onClick={() => setCheckout(true)}>{cta}<Icon n="arrowright" /></button>}
             </div>
           </section>
-          {checkout && (
+          {!ended && checkout && (
             me === null ? <><AuthPanel onDone={refresh} /><button className="ghost wide" onClick={() => setCheckout(false)}>Voltar</button></> : me === undefined ? <Skeleton rows={2} /> : (
             <section className="card stack">
               <h2>Confirmar compra</h2>
@@ -130,7 +132,7 @@ export function PublicEvent({ slug, cfg }: { slug: string; cfg: Config }) {
           <WhereWhen ev={{ ...ev, tagline: ev.theme.tagline }} />
           {ev.lat !== null && ev.lat !== undefined && <MiniMap lat={ev.lat} lng={ev.lng} name={ev.name} address={ev.location} />}
           <Gallery slug={slug} items={ev.gallery} />
-          <Programme items={ev.programme} eventName={ev.name} location={ev.location} />
+          <Programme items={ev.programme} eventName={ev.name} location={ev.location} ended={ended} />
         </div>
       </div>
       {toast.node}

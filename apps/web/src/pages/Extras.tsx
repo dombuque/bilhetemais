@@ -75,7 +75,7 @@ export function addToCalendar(items: { title: string; start: string; end?: strin
 }
 
 /** Programação agrupada por dia, com palco e botão de calendário por sessão. */
-export function Programme({ items, eventName, location }: { items: any[]; eventName: string; location: string | null }) {
+export function Programme({ items, eventName, location, ended }: { items: any[]; eventName: string; location: string | null; ended?: boolean }) {
   const days = useMemo(() => {
     const m = new Map<string, any[]>();
     for (const s of items) { const k = new Date(s.starts_at).toLocaleDateString(locale(), { weekday: 'long', day: 'numeric', month: 'long' }); m.set(k, [...(m.get(k) ?? []), s]); }
@@ -86,7 +86,7 @@ export function Programme({ items, eventName, location }: { items: any[]; eventN
   return (
     <section className="card stack">
       <div className="between"><h2>Programa</h2>
-        <button className="ghost sm" onClick={() => addToCalendar(items.map((s) => ({ title: `${s.title} — ${eventName}`, start: s.starts_at, end: s.ends_at, location: s.stage ? `${s.stage}${location ? ', ' + location : ''}` : location, description: s.description })), 'programa.ics')}>Adicionar tudo ao calendário</button></div>
+        {!ended && <button className="ghost sm" onClick={() => addToCalendar(items.map((s) => ({ title: `${s.title} — ${eventName}`, start: s.starts_at, end: s.ends_at, location: s.stage ? `${s.stage}${location ? ', ' + location : ''}` : location, description: s.description })), 'programa.ics')}>Adicionar tudo ao calendário</button>}</div>
       {days.map(([day, list]) => (
         <div key={day}>
           <p className="muted small" style={{ textTransform: 'capitalize', fontWeight: 700 }}>{day}</p>
@@ -137,7 +137,7 @@ export function WhereWhen({ ev }: { ev: any }) {
       <p className="inline"><Icon n="calendar" /><span><b>{dt(ev.startsAt)}</b><br /><span className="muted small">até {dt(ev.endsAt)}</span></span></p>
       {ev.location && <p className="inline"><Icon n="pin" /><span><b>{ev.location}</b>{hasGeo ? <> · <a href={googleDirections(ev.lat, ev.lng)} target="_blank" rel="noopener noreferrer">Google Maps</a> · <a href={wazeDirections(ev.lat, ev.lng)} target="_blank" rel="noopener noreferrer">Waze</a></> : ev.mapUrl && <> · <a href={ev.mapUrl} target="_blank" rel="noopener noreferrer">Ver no mapa</a></>}</span></p>}
       <div className="inline">
-        <button className="ghost sm" onClick={() => addToCalendar([{ title: ev.name, start: ev.startsAt, end: ev.endsAt, location: ev.location, description: ev.description }], 'evento.ics')}>📅 Calendário</button>
+        {new Date(ev.endsAt) >= new Date() && <button className="ghost sm" onClick={() => addToCalendar([{ title: ev.name, start: ev.startsAt, end: ev.endsAt, location: ev.location, description: ev.description }], 'evento.ics')}>📅 Calendário</button>}
         <button className="ghost sm" onClick={() => setSharing(true)}><Icon n="copy" />Partilhar</button>
       </div>
       {sharing && <ShareMenu title={ev.name} text={ev.tagline ?? ''} onClose={() => setSharing(false)} />}

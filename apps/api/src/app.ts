@@ -278,9 +278,28 @@ export function createApp(db: Db, cfg: AppConfig) {
     if (!['MUSICA', 'FESTIVAL', 'CONFERENCIA', 'FEIRA', 'DESPORTO', 'TEATRO', 'GASTRONOMIA', 'EMPRESARIAL', 'OUTRO'].includes(c)) throw new HttpError(400, 'categoria inválida');
     return c;
   };
+  /** Endereço curto do evento (o subdomínio): normaliza, diz se está livre e sugere uma alternativa se não estiver. */
+  const subdomainStatus = async (tx: Tx, input: string) => {
+    let slug = slugify(input);
+    if (slug.length < 3) return { slug, available: false, reason: slug ? 'curto' : 'vazio', suggestion: null as string | null };
+    const taken = async (s: string) => RESERVED.has(s) || !!(await tx.query('SELECT 1 FROM event_domains WHERE subdomain=$1', [s])).rows[0];
+    if (!(await taken(slug))) return { slug, available: true, reason: null, suggestion: null };
+    const reserved = RESERVED.has(slug);
+    // sugestão: nome reservado → «nome-evento»; em uso → «nome-2», «nome-3»… (o primeiro que estiver livre)
+    const stem = (reserved ? slug + '-evento' : slug).slice(0, 34);
+    let suggestion = reserved ? stem : `${stem}-2`;
+    for (let i = reserved ? 2 : 3; await taken(suggestion); i++) suggestion = `${stem}-${i}`;
+    return { slug, available: false, reason: reserved ? 'reservado' : 'em uso', suggestion };
+  };
+  app.get('/events/subdomain-check', ...staff('ORG_ADMIN'), h(async (req) => subdomainStatus(db, String(req.query.q ?? '').slice(0, 80))));
   app.post('/events', ...staff('ORG_ADMIN'), h(async (req) => {
     const b = req.body;
     return db.transaction(async (tx) => {
+      // um endereço escolhido pela pessoa nunca é alterado em silêncio: se não estiver livre, recusa-se
+      if (b.subdomain) {
+        const st = await subdomainStatus(tx, String(b.subdomain));
+        if (!st.available) throw new HttpError(409, st.reason === 'curto' || st.reason === 'vazio' ? 'o endereço do evento deve ter pelo menos 3 letras ou números' : st.reason === 'reservado' ? 'este endereço é reservado, escolha outro' : 'este endereço já está em uso, escolha outro');
+      }
       const e = await tx.query<any>(
         `INSERT INTO events(organization_id,name,description,starts_at,ends_at,capacity,balance_refund_allowed,location,settings,category,latitude,longitude) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
         [req.user!.organization_id, str(b.name, 'name'), b.description ?? null, b.startsAt, b.endsAt, b.capacity ?? null, !!b.balanceRefundAllowed, opt(b.location, 200), JSON.stringify(cleanSettings(b.settings)), eventCategory(b.category), ...geoPair(b)]);
@@ -337,6 +356,7 @@ export function createApp(db: Db, cfg: AppConfig) {
   const createOrder = async (tx: Tx, ev: any, channel: 'ONLINE' | 'COUNTER', b: any, format: 'DIGITAL' | 'PHYSICAL') => {
     const items = Array.isArray(b.items) ? b.items : [];
     if (!items.length) throw new HttpError(400, 'sem itens');
+    if (new Date(ev.ends_at) < new Date()) throw new HttpError(409, 'o evento já terminou: já não é possível comprar bilhetes');
     const st = (await settingsOf(tx, ev)).effective;
     if (channel === 'ONLINE' && !st.onlineSalesEnabled) throw new HttpError(409, 'a venda online está desactivada neste evento');
     if (channel === 'COUNTER' && !st.counterSalesEnabled) throw new HttpError(409, 'a venda no balcão está desactivada neste evento');
@@ -1759,9 +1779,10 @@ export function createApp(db: Db, cfg: AppConfig) {
   app.post('/public/orders/:id/pay', h(async (req) => {
     if (!/^[0-9a-f-]{36}$/.test(req.params.id)) throw new HttpError(404, 'encomenda não encontrada');
     const chargeId = await db.transaction(async (tx) => {
-      const o = (await tx.query<any>('SELECT id,status,total_minor FROM ticket_orders WHERE id=$1 FOR UPDATE', [req.params.id])).rows[0];
+      const o = (await tx.query<any>('SELECT o.id,o.status,o.total_minor,e.ends_at FROM ticket_orders o JOIN events e ON e.id=o.event_id WHERE o.id=$1 FOR UPDATE OF o', [req.params.id])).rows[0];
       if (!o) throw new HttpError(404, 'encomenda não encontrada');
       if (o.status !== 'PENDING_PAYMENT') throw new HttpError(409, 'esta encomenda já não está por pagar');
+      if (new Date(o.ends_at) < new Date()) throw new HttpError(409, 'o evento já terminou: já não é possível pagar esta encomenda');
       return startCharge(tx, 'ORDER', o.id, BigInt(o.total_minor), req.body.phone);
     });
     fire(chargeId);
