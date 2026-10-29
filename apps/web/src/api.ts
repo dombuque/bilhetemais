@@ -20,11 +20,21 @@ const MESSAGES: Record<string, string> = {
 let runtime: { baseDomain: string | null; publicUrl: string | null } = { baseDomain: null, publicUrl: null };
 export const setRuntime = (c: { baseDomain?: string | null; publicUrl?: string | null }) => { runtime = { baseDomain: c.baseDomain ?? null, publicUrl: c.publicUrl ?? null }; };
 /** Endereço de um evento: o seu subdomínio (`feira.bilhetemais.live`) quando há domínio base; senão `/e/<evento>`. */
-export const eventUrl = (slug: string) => (runtime.baseDomain ? `https://${slug}.${runtime.baseDomain}` : `${location.origin}/e/${slug}`);
+export const eventUrl = (slug: string) => {
+  // dentro da app instalada o evento abre no mesmo endereço (sem a barra de «sair» que o navegador põe ao mudar de endereço)
+  const standalone = window.matchMedia?.('(display-mode: standalone)').matches || (navigator as any).standalone === true;
+  return runtime.baseDomain && !standalone ? `https://${slug}.${runtime.baseDomain}` : `${location.origin}/e/${slug}`;
+};
+/** Endereço público do evento, para partilhar, imprimir ou pôr em QR (sempre o subdomínio, quando há). */
+export const eventShareUrl = (slug: string) => (runtime.baseDomain ? `https://${slug}.${runtime.baseDomain}` : `${location.origin}/e/${slug}`);
 /** Endereço principal da plataforma (onde ficam o login com Google, a conta e as áreas privadas). */
 export const mainUrl = () => runtime.publicUrl ?? location.origin;
+/** Entrada do backoffice da Bilhete+: o subdomínio `platform.<domínio>` (ou /platform sem domínio base). */
+export const platformUrl = () => (runtime.baseDomain ? `https://platform.${runtime.baseDomain}` : '/platform');
+/** Estamos no subdomínio do backoffice da Bilhete+? */
+export const onPlatformHost = () => !!runtime.baseDomain && location.hostname === `platform.${runtime.baseDomain}`;
 /** Estamos num subdomínio de evento (e não no endereço principal)? */
-export const onEventHost = () => !!runtime.baseDomain && location.hostname.endsWith('.' + runtime.baseDomain);
+export const onEventHost = () => !!runtime.baseDomain && location.hostname.endsWith('.' + runtime.baseDomain) && !onPlatformHost();
 
 const AKEY = 'bp_account';
 export const accountToken = () => { try { return localStorage.getItem(AKEY); } catch { return null; } };

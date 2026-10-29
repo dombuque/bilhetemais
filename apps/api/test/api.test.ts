@@ -748,6 +748,20 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     expect((await raw(`/account/google/callback?code=c5&state=${sBad.state}`, sBad.cookie)).headers.get('location')).toMatch(/^\/account#t=[\w-]+&next=%2Faccount$/);
     const sBad2 = await start('https://bilhete.test.evil.test/');
     expect((await raw(`/account/google/callback?code=c5&state=${sBad2.state}`, sBad2.cookie)).headers.get('location')).toMatch(/^\/account#t=/);
+    // app instalada: o Google abre noutro contexto, por isso a sessão passa à app por um pedido secreto (poll), de uso único
+    const rid = 'r'.repeat(10) + '0123456789abcdefghijklmnopqrstuv';
+    const poll = (r = rid) => call('GET', `/account/google/poll?rid=${r}`);
+    expect((await poll('curto')).status).toBe(400);
+    expect((await poll()).body).toEqual({ done: false });
+    const hs = await raw('/account/google/start?next=/account&rid=' + rid);
+    const hState = new URL(hs.headers.get('location')!).searchParams.get('state')!;
+    googleStub.c6 = { sub: 'g-6', email: 'seis@gmail.com', emailVerified: true, name: 'Seis' };
+    expect((await raw(`/account/google/callback?code=c6&state=${hState}`, 'bp_oauth=' + hState)).headers.get('location')).toBe('/account/done'); // nada de token no endereço
+    expect((await poll('x'.repeat(40))).body).toEqual({ done: false }); // outro pedido não recebe a sessão
+    const got = (await poll()).body;
+    expect(got.done).toBe(true);
+    expect((await call('GET', '/account/me', undefined, got.token)).body.account.email).toBe('seis@gmail.com');
+    expect((await poll()).body).toEqual({ done: false }); // só se entrega uma vez
     // alguém registou o e-mail de outra pessoa com palavra-passe (sem o confirmar): quando o dono entra com Google, a palavra-passe do intruso deixa de valer
     await call('POST', '/account/register', { name: 'Intruso', email: 'vitima@gmail.com', password: 'pw-intruso-123' });
     const intruder = (await call('POST', '/account/login', { email: 'vitima@gmail.com', password: 'pw-intruso-123' })).body.token;
@@ -890,6 +904,10 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     expect(gen.name).toBe('Bilhete+ Equipa');
     expect(gen.start_url).toBe('/company/');
     const pm: any = await (await fetch(base + '/platform/manifest.webmanifest')).json();
+    // no subdomínio platform.<domínio> a app da plataforma abre na raiz e nada dali é indexável
+    const onHost = await fetch(base + '/platform/manifest.webmanifest', { headers: { 'x-forwarded-host': 'platform.bilhete.test' } });
+    expect(((await onHost.json()) as any).start_url).toBe('/');
+    expect((await fetch(base + '/anything', { headers: { 'x-forwarded-host': 'platform.bilhete.test' } })).headers.get('x-robots-tag')).toBe('noindex, nofollow');
     expect(pm).toMatchObject({ name: 'Bilhete+ Administração', start_url: '/platform/' });
   });
 

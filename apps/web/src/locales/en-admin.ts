@@ -14,6 +14,7 @@ export const EN_ADMIN: Record<string, string> = {
   'Endereço curto do evento': 'Short event address', 'Será o endereço público do evento. Só letras, números e hífens; tem de ser único.': 'This will be the public address of the event. Letters, numbers and hyphens only; it must be unique.', 'Este endereço já está em uso.': 'This address is already in use.', 'Este endereço é reservado.': 'This address is reserved.', 'Use pelo menos 3 letras ou números.': 'Use at least 3 letters or numbers.', 'Sugestão:': 'Suggestion:',
   'este endereço já está em uso, escolha outro': 'this address is already in use, choose another', 'este endereço é reservado, escolha outro': 'this address is reserved, choose another', 'o endereço do evento deve ter pelo menos 3 letras ou números': 'the event address must have at least 3 letters or numbers',
   'Bilhete+ no seu telemóvel': 'Bilhete+ on your phone', 'Eventos e bilhetes sempre à mão, em ecrã inteiro.': 'Events and tickets always at hand, full screen.',
+  'Toque em Instalar e depois em «Adicionar ao ecrã principal».': 'Tap Install, then “Add to Home Screen”.',
   // ---------- estados ----------
   'Activa': 'Active', 'Publicado': 'Published', 'Pago': 'Paid', 'Confirmado': 'Confirmed', 'Pendente': 'Pending', 'A aguardar pagamento': 'Awaiting payment', 'Utilizado': 'Used', 'Suspensa': 'Suspended', 'Desactivada': 'Disabled', 'Cancelado': 'Cancelled', 'Bloqueado': 'Blocked', 'Encerrado': 'Closed',
   'Titular': 'Holder', 'Estado': 'Status',

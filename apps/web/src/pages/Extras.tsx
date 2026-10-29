@@ -1,6 +1,6 @@
 import { locale } from '../i18n';
 import { useEffect, useMemo, useState } from 'react';
-import { dt } from '../api';
+import { dt, eventShareUrl } from '../api';
 import { Icon, Modal, Qr } from '../ui';
 import { googleDirections, wazeDirections } from '../map/links';
 
@@ -104,7 +104,8 @@ export function Programme({ items, eventName, location, ended }: { items: any[];
 /** Menu de partilha: WhatsApp, e-mail, redes sociais, copiar a ligação e (no telemóvel) a partilha do sistema. */
 export function ShareMenu({ title, text, onClose }: { title: string; text: string; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
-  const url = location.origin + location.pathname;
+  const evMatch = /^\/e\/([a-z0-9-]+)/.exec(location.pathname);
+  const url = evMatch ? eventShareUrl(evMatch[1]) : location.origin + location.pathname; // partilha-se sempre o endereço próprio do evento
   const u = encodeURIComponent(url), msg = encodeURIComponent(`${title} — ${text}`.trim()), ttl = encodeURIComponent(title);
   const options: { name: string; href: string; color: string; mark: string }[] = [
     { name: 'WhatsApp', href: `https://wa.me/?text=${msg}%20${u}`, color: '#25D366', mark: 'W' },

@@ -40,13 +40,15 @@ const DISMISS = 'bp_install_dismissed';
 export function InstallBanner() {
   const inst = useInstall();
   const [hidden, setHidden] = useState(() => { try { return Date.now() - Number(localStorage.getItem(DISMISS) ?? 0) < 14 * 864e5; } catch { return false; } });
-  if (inst.installed || hidden || !inst.canPrompt) return null;
+  // iPhone/iPad: o Safari não avisa nem deixa instalar sozinho; o toque abre a folha de partilhar, onde «Adicionar ao ecrã principal» fica a um toque
+  const ios = inst.ios && typeof navigator.share === 'function';
+  if (inst.installed || hidden || !(inst.canPrompt || ios)) return null;
   const close = () => { try { localStorage.setItem(DISMISS, String(Date.now())); } catch { /* sem armazenamento */ } setHidden(true); };
   return (
     <div className="install-banner" role="region" aria-label="Instalar a app">
       <img src="/icon-192.png" alt="" width="44" height="44" />
-      <div><b>Bilhete+ no seu telemóvel</b><small>Eventos e bilhetes sempre à mão, em ecrã inteiro.</small></div>
-      <button type="button" className="ib-go" onClick={async () => { await inst.prompt(); close(); }}>Instalar</button>
+      <div><b>Bilhete+ no seu telemóvel</b><small>{inst.canPrompt ? 'Eventos e bilhetes sempre à mão, em ecrã inteiro.' : 'Toque em Instalar e depois em «Adicionar ao ecrã principal».'}</small></div>
+      <button type="button" className="ib-go" onClick={async () => { if (inst.canPrompt) { await inst.prompt(); close(); } else { try { await navigator.share({ title: 'Bilhete+', url: location.origin }); } catch { /* cancelado */ } } }}>Instalar</button>
       <button type="button" className="ib-x" aria-label="Fechar" onClick={close}><Icon n="x" /></button>
     </div>
   );

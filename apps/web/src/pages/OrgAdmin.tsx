@@ -1,6 +1,6 @@
 import { locale } from '../i18n';
 import { useCallback, useEffect, useState } from 'react';
-import { api, dt, eventUrl, mt, toMinor } from '../api';
+import { api, dt, eventShareUrl, mt, toMinor } from '../api';
 import { BarRow, ConfirmButton, Empty, Field, Icon, Layout, Modal, MoneyInput, PageHead, Pill, Skeleton, useAction, useToast } from '../ui';
 import { BrandEditor } from './Brand';
 import { Company } from './Company';
@@ -136,7 +136,7 @@ function EventAdmin({ id, back, toast, onOpen }: { id: string; back: () => void;
   const act = (fn: () => Promise<unknown>, ok: string) => run(async () => { await fn(); await load(); }, ok);
   if (!ov || !rep) return <Skeleton rows={5} />;
   const ev = ov.event;
-  const url = eventUrl(ev.subdomain);
+  const url = eventShareUrl(ev.subdomain);
 
   return (
     <>

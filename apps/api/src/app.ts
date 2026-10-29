@@ -93,14 +93,15 @@ export function createApp(db: Db, cfg: AppConfig) {
     next();
   });
   // as áreas de entrada (plataforma, empresas, contas) não devem aparecer em motores de busca
-  app.use(/^\/(platform|company|account|newsletter)(\/|$)/, (_req, res, next) => { res.setHeader('X-Robots-Tag', 'noindex, nofollow'); next(); });
+  app.use((req, res, next) => { if (/^\/(platform|company|account|newsletter)(\/|$)/.test(req.path) || req.hostname.startsWith('platform.')) res.setHeader('X-Robots-Tag', 'noindex, nofollow'); next(); });
   // manifestos da app instalável da equipa (um por empresa e um da plataforma); um endereço desconhecido recebe o genérico
   const staffManifest = (name: string, start: string, theme = '#0B0820') => ({
     id: start, name, short_name: 'Bilhete+ Equipa', description: 'Balcão, portaria e gestão de eventos.', lang: 'pt-MZ', start_url: start, scope: start, display: 'standalone', orientation: 'portrait',
     background_color: '#0B0820', theme_color: theme,
     icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }, { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }],
   });
-  app.get('/platform/manifest.webmanifest', (_req, res) => { res.type('application/manifest+json').set('Cache-Control', 'no-cache').json(staffManifest('Bilhete+ Administração', '/platform/')); });
+  // no subdomínio platform.<domínio> a app abre na raiz; no endereço principal, em /platform/
+  app.get('/platform/manifest.webmanifest', (req, res) => { const root = req.hostname.startsWith('platform.') ? '/' : '/platform/'; res.type('application/manifest+json').set('Cache-Control', 'no-cache').json(staffManifest('Bilhete+ Administração', root)); });
   app.get('/company/:slug/manifest.webmanifest', async (req, res, next) => {
     try {
       const o = (await db.query<any>(`SELECT trade_name FROM organizations WHERE slug=$1 AND status<>'DISABLED'`, [req.params.slug])).rows[0];
@@ -412,7 +413,7 @@ export function createApp(db: Db, cfg: AppConfig) {
     // e-mail automático com os bilhetes (para compras com conta; compras de balcão têm telefone, não e-mail)
     const o = (await tx.query<any>('SELECT o.buyer_name,o.buyer_contact,o.channel,e.name AS event FROM ticket_orders o JOIN events e ON e.id=o.event_id WHERE o.id=$1', [orderId])).rows[0];
     if (ts.rows.length && o?.channel === 'ONLINE' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(o.buyer_contact ?? '')) {
-      const base = cfg.publicUrl ?? 'https://bilhetemais.semfila.online';
+      const base = cfg.publicUrl ?? 'https://bilhetemais.live';
       const text = [`Olá ${o.buyer_name},`, '', `Os seus bilhetes para ${o.event} estão prontos.`, '', 'Abra o link à entrada (serve também de carteira):', '',
         ...ts.rows.map((t: any, i: number) => `Bilhete ${i + 1}: ${base}/t/${tokenFor(t.id)}`), '', `Também os encontra em ${base}/account, em «Os meus bilhetes».`, 'Guarde este e-mail: quem tiver o link tem acesso ao bilhete e ao saldo.'].join('\n');
       await queueMail(db, cfg.mailer ?? null, tx, { to: o.buyer_contact.toLowerCase(), subject: `Os seus bilhetes — ${o.event}`, text });
@@ -499,12 +500,22 @@ export function createApp(db: Db, cfg: AppConfig) {
     if (!cfg.google) throw new HttpError(409, 'a entrada com Google não está disponível');
     const state = randomBytes(24).toString('base64url'), verifier = randomBytes(32).toString('base64url');
     const challenge = createHash('sha256').update(verifier).digest('base64url');
-    await db.query(`INSERT INTO oauth_states VALUES($1,$2,$3,now()+interval '10 minutes')`, [hashToken(state), verifier, safeNext(req.query.next)]);
+    // «rid»: segredo da app instalada, que fica à espera (poll) enquanto o Google abre noutro contexto; só se guarda o hash
+    const rid = typeof req.query.rid === 'string' && /^[\w-]{32,64}$/.test(req.query.rid) ? hashToken(req.query.rid) : null;
+    await db.query(`INSERT INTO oauth_states(state_hash,verifier,next,expires_at,handoff_hash) VALUES($1,$2,$3,now()+interval '10 minutes',$4)`, [hashToken(state), verifier, safeNext(req.query.next), rid]);
     await db.query(`DELETE FROM oauth_states WHERE expires_at<now()`);
     // o cookie liga o pedido a este navegador: impede que alguém envie a outra pessoa o seu próprio retorno do Google
     res.setHeader('Set-Cookie', `bp_oauth=${state}; Path=/account/google; HttpOnly; SameSite=Lax; Max-Age=600${secureCookie ? '; Secure' : ''}`);
     res.redirect(302, authorizeUrl(cfg.google, { redirectUri: googleRedirect(), state, challenge }));
     return undefined;
+  }));
+  /** A app instalada pergunta se a entrada com Google já terminou (uso único: a sessão é entregue uma só vez). */
+  app.get('/account/google/poll', limit(cfg.loginRateLimit ? cfg.loginRateLimit * 12 : undefined), h(async (req) => {
+    const rid = typeof req.query.rid === 'string' && /^[\w-]{32,64}$/.test(req.query.rid) ? req.query.rid : '';
+    if (!rid) throw new HttpError(400, 'pedido inválido');
+    const r = (await db.query<any>(`DELETE FROM login_handoffs WHERE rid_hash=$1 AND expires_at>now() RETURNING sealed`, [hashToken(rid)])).rows[0];
+    await db.query(`DELETE FROM login_handoffs WHERE expires_at<now()`);
+    return r ? { done: true, token: openSecret(r.sealed, cfg.tokenSecret) } : { done: false };
   }));
   app.get('/account/google/callback', limit(cfg.loginRateLimit), h(async (req, res) => {
     const fail = (why: string) => { res.redirect(302, '/account?error=' + encodeURIComponent(why)); return undefined; };
@@ -512,7 +523,7 @@ export function createApp(db: Db, cfg: AppConfig) {
     const state = String(req.query.state ?? ''), code = String(req.query.code ?? '');
     if (req.query.error || !state || !code) return fail('google_cancelled');
     if (cookieOf(req as Request, 'bp_oauth') !== state) return fail('google_state');
-    const st = (await db.query<any>(`DELETE FROM oauth_states WHERE state_hash=$1 AND expires_at>now() RETURNING verifier,next`, [hashToken(state)])).rows[0]; // uso único
+    const st = (await db.query<any>(`DELETE FROM oauth_states WHERE state_hash=$1 AND expires_at>now() RETURNING verifier,next,handoff_hash`, [hashToken(state)])).rows[0]; // uso único
     if (!st) return fail('google_state');
     let p;
     try { p = await exchangeCode(cfg.google, code, st.verifier, googleRedirect()); } catch { return fail('google_failed'); }
@@ -539,6 +550,12 @@ export function createApp(db: Db, cfg: AppConfig) {
     });
     const token = await accountSession(accountId);
     res.setHeader('Set-Cookie', 'bp_oauth=; Path=/account/google; Max-Age=0');
+    if (st.handoff_hash) {
+      // entrada iniciada na app instalada: a sessão fica guardada (cifrada) à espera de a app a ir buscar; aqui só se mostra «feito»
+      await db.query(`INSERT INTO login_handoffs(rid_hash,sealed,expires_at) VALUES($1,$2,now()+interval '5 minutes') ON CONFLICT (rid_hash) DO UPDATE SET sealed=EXCLUDED.sealed, expires_at=EXCLUDED.expires_at`, [st.handoff_hash, sealSecret(token, cfg.tokenSecret)]);
+      res.redirect(302, '/account/done');
+      return undefined;
+    }
     // o token vai no fragmento (#): não chega a servidores nem a registos
     // a sessão volta ao endereço de onde a pessoa veio (o de um evento, com o seu subdomínio, ou o principal)
     if (/^https:\/\//.test(st.next)) { const u = new URL(st.next); res.redirect(302, `${u.origin}/account#t=${token}&next=${encodeURIComponent(u.pathname + u.search)}`); }
@@ -548,7 +565,7 @@ export function createApp(db: Db, cfg: AppConfig) {
 
   // ---------- newsletter (contas de participantes) ----------
   const unsubToken = (accountId: string) => createHmac('sha256', cfg.tokenSecret).update('unsub:' + accountId).digest('base64url').slice(0, 22);
-  const unsubLink = (accountId: string) => `${cfg.publicUrl ?? 'https://bilhetemais.semfila.online'}/newsletter/unsubscribe?a=${accountId}&t=${unsubToken(accountId)}`;
+  const unsubLink = (accountId: string) => `${cfg.publicUrl ?? 'https://bilhetemais.live'}/newsletter/unsubscribe?a=${accountId}&t=${unsubToken(accountId)}`;
   /** Sair da newsletter com o link do e-mail (não exige sessão). */
   app.post('/public/newsletter/unsubscribe', h(async (req) => {
     const a = String(req.body?.a ?? ''), t = String(req.body?.t ?? '');
@@ -721,7 +738,7 @@ export function createApp(db: Db, cfg: AppConfig) {
     const sent = (await db.query<any>('SELECT count(*)::int AS c FROM notifications WHERE subject LIKE $1', ['%[' + o.id.slice(0, 8) + ']'])).rows[0].c;
     if (sent >= 3) throw new HttpError(429, 'já enviámos este bilhete por e-mail várias vezes');
     const ts = (await orderTickets(db, o.id)).filter((t: any) => t.token);
-    const base = cfg.publicUrl ?? 'https://bilhetemais.semfila.online';
+    const base = cfg.publicUrl ?? 'https://bilhetemais.live';
     const text = ['Obrigado pela sua compra no Bilhete+.', '', 'Os seus bilhetes (abra o link à entrada; serve também de carteira):', '',
       ...ts.map((t: any, i: number) => `Bilhete ${i + 1}: ${base}/t/${t.token}`), '', 'Guarde este e-mail: quem tiver o link tem acesso ao bilhete e ao saldo.'].join('\n');
     await queueMail(db, cfg.mailer ?? null, db, { to: email, subject: `Os seus bilhetes — Bilhete+ [${o.id.slice(0, 8)}]`, text });
@@ -1749,7 +1766,7 @@ export function createApp(db: Db, cfg: AppConfig) {
   const geoQueue = <T,>(fn: () => Promise<T>) => { const run = geoLast.then(fn); geoLast = run.catch(() => undefined).then(() => new Promise((r) => setTimeout(r, 1100))); return run; };
   const defaultGeocoder = async (q: string) => {
     const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=mz&accept-language=pt&q=${encodeURIComponent(q)}`;
-    const r = await fetch(url, { headers: { 'User-Agent': `Bilhete+/1.0 (${cfg.publicUrl ?? 'https://bilhetemais.semfila.online'})` }, signal: AbortSignal.timeout(8000) });
+    const r = await fetch(url, { headers: { 'User-Agent': `Bilhete+/1.0 (${cfg.publicUrl ?? 'https://bilhetemais.live'})` }, signal: AbortSignal.timeout(8000) });
     if (!r.ok) throw new Error('geocoder ' + r.status);
     return ((await r.json()) as any[]).map((x) => ({ name: String(x.display_name).slice(0, 160), lat: Number(x.lat), lng: Number(x.lon), type: x.type }));
   };

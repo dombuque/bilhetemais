@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { accountApi, accountToken, dt, mainUrl, mt, onEventHost, setAccountToken } from '../api';
 import { Empty, Icon, LangSwitch, Pill, Skeleton, useAction, useToast } from '../ui';
 import { AppTabs } from '../AppTabs';
-import { InstallButton, useInstall } from '../install';
+import { InstallButton, isStandalone, useInstall } from '../install';
 import './participant.css';
 
 export interface Me { name: string; email: string | null; phone: string | null; hasPassword?: boolean; newsletter?: boolean }
@@ -67,6 +67,37 @@ function PhoneEntry({ onDone }: { onDone: () => void }) {
   );
 }
 
+/** Google dentro da app instalada: o Google abre no navegador do telemóvel, que não partilha a sessão com a app. A app fica a perguntar ao servidor até a entrada terminar. */
+function GoogleInApp({ next, onDone }: { next: string; onDone: () => void }) {
+  const [waiting, setWaiting] = useState(false);
+  const timer = useRef<number | null>(null);
+  const stop = () => { if (timer.current) window.clearInterval(timer.current); timer.current = null; setWaiting(false); };
+  useEffect(() => stop, []);
+  const go = () => {
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    const rid = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    window.open(`${mainUrl()}/account/google/start?next=${encodeURIComponent(next)}&rid=${rid}`, '_blank');
+    setWaiting(true);
+    const started = Date.now();
+    timer.current = window.setInterval(async () => {
+      if (Date.now() - started > 5 * 60_000) return stop();
+      try { const r = await fetch(`/account/google/poll?rid=${rid}`).then((x) => x.json()); if (r.done) { stop(); setAccountToken(r.token); onDone(); } } catch { /* tenta outra vez */ }
+    }, 1500);
+  };
+  return waiting
+    ? <div className="pp-wait"><p className="pp-sub">A aguardar o Google… Entre na janela que abriu e volte à app.</p><button type="button" className="pp-link" onClick={stop}>Cancelar</button></div>
+    : <button type="button" className="pp-google" onClick={go}><GoogleG />Continuar com o Google</button>;
+}
+
+/** Página aberta no navegador depois de o Google terminar uma entrada iniciada na app. */
+export function AccountDone() {
+  return (
+    <div className="pp"><header className="pp-top"><a href="/" aria-label="Início"><img src="/logo-dark.svg" alt="Bilhete+" /></a></header>
+      <section className="pp-hero"><span className="pp-label">[BP/ Entrada]</span><h1>Entrada concluída</h1></section>
+      <main className="pp-main"><section className="pp-card pp-wide"><p className="pp-sub">Já pode fechar esta janela e voltar à app Bilhete+: a sua sessão já está iniciada lá.</p></section></main></div>
+  );
+}
+
 /** Entrar ou criar conta: Google ou código por SMS. Chama `onDone` quando a sessão fica iniciada. */
 export function AuthPanel({ onDone, intro, next }: { onDone: () => void; intro?: string; next?: string }) {
   const cfg = useAuthConfig();
@@ -78,7 +109,9 @@ export function AuthPanel({ onDone, intro, next }: { onDone: () => void; intro?:
       <h2 className="pp-h">Entrar</h2>
       <p className="pp-sub">{intro ?? 'Para comprar bilhetes precisa de uma conta. É rápido: entre com o Google ou com o seu telemóvel.'}</p>
       {!cfg ? <Skeleton rows={2} /> : <>
-        {cfg.google && <a className="pp-google" href={`${mainUrl()}/account/google/start?next=${encodeURIComponent(onEventHost() ? location.href : back)}`}><GoogleG />Continuar com o Google</a>}
+        {cfg.google && (isStandalone()
+          ? <GoogleInApp next={onEventHost() ? location.href : back} onDone={onDone} />
+          : <a className="pp-google" href={`${mainUrl()}/account/google/start?next=${encodeURIComponent(onEventHost() ? location.href : back)}`}><GoogleG />Continuar com o Google</a>)}
         {cfg.google && cfg.phone && <div className="pp-or"><span>ou</span></div>}
         {cfg.phone && <PhoneEntry onDone={onDone} />}
         {none && <p className="pp-alert" role="alert">A entrada de contas não está disponível neste momento.</p>}

@@ -3,7 +3,7 @@ import { getLang, setLang } from './i18n';
 import QRCode from 'qrcode';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { setToken } from './api';
+import { setToken, onPlatformHost } from './api';
 
 import { Icon } from './icons';
 export { Icon };
@@ -99,7 +99,7 @@ export function LangSwitch({ className = '' }: { className?: string }) {
 export function Layout({ me, nav, view, onView, children }: { me: any; nav: NavItem[]; view: string; onView: (v: string) => void; children: ReactNode }) {
   const roleName: Record<string, string> = { PLATFORM_ADMIN: 'Administração', ORG_ADMIN: 'Organizador', CASHIER: 'Balcão', MERCHANT_OPERATOR: 'Comerciante', GATE_OPERATOR: 'Acessos' };
   const [account, setAccount] = useState(false);
-  const logout = () => { setToken(null); location.assign(me.orgSlug ? `/company/${me.orgSlug}` : '/platform'); };
+  const logout = () => { setToken(null); location.assign(me.orgSlug ? `/company/${me.orgSlug}` : onPlatformHost() ? '/' : '/platform'); };
   return (
     <div className="shell">
       <header className="topbar"><img src="/logo-dark.svg" alt="Bilhete+" /><LangSwitch /><button className="ghost sm" onClick={() => setAccount(true)} aria-label="A minha conta" style={{ marginLeft: 'auto', marginRight: 8 }}>{me.name.split(' ')[0]}</button></header>

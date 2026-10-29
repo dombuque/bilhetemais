@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api, setToken } from '../api';
+import { api, setToken, onPlatformHost } from '../api';
 import { Field, Modal, Pill, Qr, useAction, useToast } from '../ui';
 
 /** «A minha conta»: alterar palavra-passe e verificação em dois passos (TOTP). */
@@ -55,7 +55,7 @@ export default function Account({ me, onClose }: { me: any; onClose: () => void 
           <button className="ghost" disabled={busy} onClick={() => run(async () => { const r = await api('POST', '/me/mfa/setup', {}); setMfa({ secret: r.secret, url: r.otpauthUrl }); })}>Activar verificação em dois passos</button>
         )}
       </section>
-      <button className="ghost" onClick={() => { setToken(null); location.assign(me.orgSlug ? `/company/${me.orgSlug}` : '/platform'); }}>Terminar sessão</button>
+      <button className="ghost" onClick={() => { setToken(null); location.assign(me.orgSlug ? `/company/${me.orgSlug}` : (onPlatformHost() ? '/' : '/platform')); }}>Terminar sessão</button>
       {toast.node}
     </Modal>
   );

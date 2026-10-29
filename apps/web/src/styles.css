@@ -398,3 +398,20 @@ body:has(.shell) { background: #f4f2ee; }
 body:has(.app-tabs) .install-banner { bottom: calc(var(--tabs-h) + 10px + env(safe-area-inset-bottom)); } body:has(.sticky-bar) .install-banner { bottom: calc(96px + env(safe-area-inset-bottom)); }
 /* janelas: acima de tudo (menus, separadores, barra de instalar) e com altura que respeita a barra do Safari */
 .scrim { z-index: 200; } .sheet { max-height: 88vh; max-height: 88dvh; }
+
+/* ---------- fluidez: arranque, transições e barra de baixo colada ao fundo ---------- */
+.splash { position: fixed; inset: 0; display: grid; place-items: center; background: #0b0820; } .splash img { border-radius: 20px; animation: splashpulse 1.2s ease-in-out infinite alternate; }
+@keyframes splashpulse { from { opacity: .7; transform: scale(.97); } to { opacity: 1; transform: scale(1); } }
+#root > *:first-child { animation: routein .16s ease-out; } @keyframes routein { from { opacity: .0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { #root > *:first-child, .splash img { animation: none; } html { scroll-behavior: auto; } }
+@media (display-mode: standalone) { html { scroll-behavior: auto; } }
+html { height: 100%; } body { min-height: 100%; }
+.app-tabs { bottom: 0; padding: 4px 6px max(6px, env(safe-area-inset-bottom)); min-height: calc(var(--tabs-h) - 6px); align-items: stretch; }
+.app-tabs a { min-height: 50px; }
+.pp-wait { display: grid; gap: 8px; justify-items: start; }
+.shell .side { border-radius: 0; }
+@media (max-width: 860px) { .shell { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom)); } .side { bottom: 0; padding: 4px 6px max(6px, env(safe-area-inset-bottom)); } }
+/* barra de pesquisa do mapa: sempre clara e nítida (no modo escuro ficava baça sobre o mapa) */
+.map-search { background: #fff !important; color: #0b0820 !important; box-shadow: 0 6px 24px rgb(11 8 32 / .28), 0 0 0 1px rgb(11 8 32 / .06) !important; }
+.map-search input { color: #0b0820 !important; -webkit-text-fill-color: #0b0820; } .map-search input::placeholder { color: #6b6885; opacity: 1; }
+.map-chips button { box-shadow: 0 2px 10px rgb(11 8 32 / .2); }
