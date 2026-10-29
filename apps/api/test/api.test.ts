@@ -42,6 +42,7 @@ const S: Record<string, any> = {};
 const geoCalls: string[] = [];
 // M-Pesa simulado: as respostas são controladas pelo teste
 const googleStub: Record<string, any> = {};
+const smsSent: { to: string; text: string }[] = []; // SMS simulado: guarda o que seria enviado
 const mpesaStub: any = { next: [] as any[], calls: [] as any[], query: { outcome: 'PENDING', code: 'INS-0', message: 'por confirmar' } };
 let appInst: any;
 
@@ -53,6 +54,7 @@ beforeAll(async () => {
   appInst = createApp(db, { tokenSecret: 'secret-test', webhookSecret: WEBHOOK_SECRET, selfRegistration: true,
     publicUrl: 'https://bilhete.test',
     baseDomain: 'bilhete.test',
+    sms: { send: async (to: string, text: string) => { smsSent.push({ to, text }); } },
     google: { clientId: 'cid', clientSecret: 'sec', exchange: async (code: string) => { const p = googleStub[code]; if (!p) throw new Error('código recusado'); return p; } },
     mpesa: {
       charge: async (p: any) => { mpesaStub.calls.push(p); const n = mpesaStub.next.shift(); return typeof n === 'function' ? n() : n ?? { outcome: 'SUCCESS', code: 'INS-0', message: 'ok', transactionId: 'TX-' + mpesaStub.calls.length }; },
@@ -820,6 +822,75 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     expect(acts).toEqual(expect.arrayContaining(['ticket.block', 'ticket.unblock', 'ticket.cancel']));
     // um cancelado pode ser visto pela conta de quem comprou como cancelado
     expect((await call('GET', `/public/tickets/${t1.token}`)).body.ticketStatus).toBe('REVOKED');
+  });
+
+  it('entrada por telemóvel: código por SMS, sem e-mail nem palavra-passe; nome só na primeira vez; limites e erros', async () => {
+    expect((await call('GET', '/public/config')).body.phone).toBe(true);
+    const codeFor = (phone: string) => /\b(\d{6})\b/.exec([...smsSent].reverse().find((m) => m.to === phone)!.text)![1];
+    const start = (phone: string) => call('POST', '/account/phone/start', { phone });
+    const verify = (phone: string, code: string, name?: string) => call('POST', '/account/phone/verify', { phone, code, name });
+    // número inválido e formatos aceites
+    expect((await start('abc')).status).toBe(400);
+    expect((await start('82 123 45')).status).toBe(400);
+    expect((await start('+258 91 234 5678')).status).toBe(400); // Moçambique: 82–87
+    expect((await start('84 111 2233')).status).toBe(200);
+    expect(smsSent.at(-1)!.to).toBe('+258841112233'); // normalizado
+    expect(smsSent.at(-1)!.text).toMatch(/Bilhete\+.*\d{6}/);
+    // código errado não entra; o certo, sem nome, pede o nome (e o código continua válido)
+    const good = codeFor('+258841112233');
+    const wrong = good === '000000' ? '111111' : '000000';
+    expect((await verify('84 111 2233', wrong)).status).toBe(401);
+    const noName = await verify('84 111 2233', good);
+    expect(noName.status).toBe(400);
+    expect(noName.body.error).toMatch(/nome/);
+    const reg = await verify('+258841112233', good, 'Joana da Praça');
+    expect(reg.status).toBe(200);
+    expect(reg.body.account).toMatchObject({ name: 'Joana da Praça', email: null, phone: '+258841112233' });
+    const tok = reg.body.token;
+    expect((await call('GET', '/account/me', undefined, tok)).body.account).toMatchObject({ phone: '+258841112233', hasPassword: false, newsletter: false });
+    // o código só vale uma vez
+    expect((await verify('84 111 2233', good, 'Outro Nome')).status).toBe(401);
+    // compra com a conta por telemóvel: o contacto é o número (não há e-mail para enviar)
+    await db.query('UPDATE ticket_types SET quantity=quantity+3 WHERE id=$1', [S.type]);
+    const o = await buyTicket('festival-de-maputo', { items: [{ ticketTypeId: S.type, qty: 1 }] }, tok);
+    expect(o.status).toBe(200);
+    expect((await db.query<any>('SELECT buyer_name,buyer_contact FROM ticket_orders WHERE id=$1', [o.body.orderId])).rows[0]).toMatchObject({ buyer_name: 'Joana da Praça', buyer_contact: '+258841112233' });
+    await webhook({ id: 'evt-ph-' + o.body.orderId, type: 'payment.succeeded', kind: 'ORDER', ref: o.body.orderId });
+    expect((await db.query<any>(`SELECT count(*)::int AS c FROM notifications WHERE subject LIKE 'Os seus bilhetes%' AND to_email='+258841112233'`)).rows[0].c).toBe(0);
+    expect((await call('GET', `/public/orders/${o.body.orderId}`)).body.emailedTo).toBeNull();
+    // voltar a entrar com outro formato do mesmo número entra na mesma conta (sem pedir o nome)
+    await start('0841112233');
+    const back = await verify('0841112233', codeFor('+258841112233'));
+    expect(back.status).toBe(200);
+    expect((await db.query<any>(`SELECT count(*)::int AS c FROM accounts WHERE phone_e164='+258841112233' AND status='ACTIVE'`)).rows[0].c).toBe(1);
+    // no máximo 3 códigos por número em 15 minutos
+    for (let i = 0; i < 3; i++) expect((await start('86 333 4455')).status).toBe(200);
+    expect((await start('86 333 4455')).status).toBe(429);
+    expect((await start('86 333 4456')).status).toBe(200); // outro número não é afectado
+    // 5 tentativas erradas bloqueiam o código
+    await start('85 222 3344');
+    const c2 = codeFor('+258852223344');
+    const bad = c2 === '123456' ? '654321' : '123456';
+    for (let i = 0; i < 5; i++) expect((await verify('85 222 3344', bad, 'Teste')).status).toBe(401);
+    expect((await verify('85 222 3344', c2, 'Teste')).status).toBe(401); // já bloqueado, mesmo com o certo
+    // apagar a conta confirma-se escrevendo o número
+    expect((await call('DELETE', '/account/me', { confirm: '84 999 0000' }, tok)).status).toBe(401);
+    expect((await call('DELETE', '/account/me', { confirm: '84 111 2233' }, tok)).status).toBe(200);
+    expect((await call('GET', '/account/me', undefined, tok)).status).toBe(401);
+  });
+
+  it('app instalável da equipa: manifesto por empresa e da plataforma, sem revelar empresas inexistentes', async () => {
+    const slug = (await call('GET', '/me', undefined, S.adminA)).body.orgSlug;
+    const m = await fetch(base + `/company/${slug}/manifest.webmanifest`);
+    expect(m.headers.get('content-type')).toMatch(/manifest\+json/);
+    const mj: any = await m.json();
+    expect(mj).toMatchObject({ display: 'standalone', start_url: `/company/${slug}/`, scope: `/company/${slug}/` });
+    expect(mj.name).toMatch(/^Bilhete\+ Equipa — /);
+    const gen: any = await (await fetch(base + '/company/nao-existe-xyz/manifest.webmanifest')).json(); // neutro: não revela se existe
+    expect(gen.name).toBe('Bilhete+ Equipa');
+    expect(gen.start_url).toBe('/company/');
+    const pm: any = await (await fetch(base + '/platform/manifest.webmanifest')).json();
+    expect(pm).toMatchObject({ name: 'Bilhete+ Administração', start_url: '/platform/' });
   });
 
   it('endereço curto do evento: sugerido pelo nome, verificado, nunca duplicado nem reservado', async () => {

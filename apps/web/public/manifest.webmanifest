@@ -1,16 +1,78 @@
 {
+  "id": "/",
   "name": "Bilhete+",
   "short_name": "Bilhete+",
-  "description": "O seu bilhete, saldo e QR de pagamento no evento.",
+  "description": "Eventos, bilhetes e a sua carteira no telemóvel.",
   "lang": "pt-MZ",
-  "start_url": "/",
+  "dir": "ltr",
+  "start_url": "/app?source=pwa",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#F6F5FF",
-  "theme_color": "#5B2EFF",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "portrait",
+  "background_color": "#0B0820",
+  "theme_color": "#0B0820",
+  "categories": [
+    "entertainment",
+    "lifestyle",
+    "shopping"
+  ],
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Eventos",
+      "short_name": "Eventos",
+      "url": "/events",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Os meus bilhetes",
+      "short_name": "Bilhetes",
+      "url": "/account",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Perfil",
+      "short_name": "Perfil",
+      "url": "/account/profile",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
   ]
 }

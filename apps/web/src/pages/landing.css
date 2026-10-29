@@ -149,3 +149,4 @@
 /* faixa de títulos a correr: altura própria, para o texto não ficar cortado */
 .lp-marquee { min-height: 56px; display: flex; align-items: center; } .lp-marquee .lp-track { align-items: center; } .lp-marquee span { line-height: 1.25; flex: none; white-space: nowrap; }
 @media (min-width: 960px) { .lp-marquee { min-height: 72px; } }
+.lp-nav .go .inst-nav { display: none; } @media (min-width: 960px) { .lp-nav .go .inst-nav { display: inline-flex; } }

@@ -1,3 +1,4 @@
+import { InstallButton } from './install';
 import { getLang, setLang } from './i18n';
 import QRCode from 'qrcode';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
@@ -110,6 +111,7 @@ export function Layout({ me, nav, view, onView, children }: { me: any; nav: NavI
           <b>{me.merchantName ?? me.orgName ?? 'Plataforma'}</b>
           <div className="muted small">{me.name} · {roleName[me.role]}</div>
           <LangSwitch className="side-lang" />
+          <span className="side-install"><InstallButton label="Instalar app da equipa" className="ghost sm" staff /></span>
           <button className="ghost sm" style={{ marginTop: 10 }} onClick={() => setAccount(true)}><Icon n="users" />A minha conta</button>
           <button className="ghost sm" style={{ marginTop: 8 }} onClick={logout}><Icon n="logout" />Sair</button>
         </div>

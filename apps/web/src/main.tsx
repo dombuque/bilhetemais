@@ -7,6 +7,7 @@ import './styles.css';
 import { BackToTop } from './ui';
 import { installTranslator } from './i18n';
 import { setRuntime } from './api';
+import { captureInstallPrompt } from './install';
 import { Home } from './pages/Landing';
 // cada página carrega à parte: quem abre a página inicial (ou o bilhete) não descarrega o código da equipa
 const Unsubscribe = lazy(() => import('./pages/Newsletter').then((m) => ({ default: m.Unsubscribe })));
@@ -46,7 +47,9 @@ function App() {
   if ((m = /^\/o\/([0-9a-f-]{36})$/.exec(path))) return <Order id={m[1]} cfg={cfg} />;
   if ((m = /^\/t\/([\w-]+)$/.exec(path))) return <Wallet token={m[1]} cfg={cfg} />;
   if (path === '/newsletter/unsubscribe') return <Suspense fallback={null}><Unsubscribe /></Suspense>;
-  if (path === '/account') return <Suspense fallback={null}><AccountPage /></Suspense>;
+  if (path === '/account' || path === '/account/') return <Suspense fallback={null}><AccountPage view="tickets" /></Suspense>;
+  if (path === '/account/profile' || path === '/account/profile/') return <Suspense fallback={null}><AccountPage view="profile" /></Suspense>;
+  if (path === '/app' || path === '/app/') { location.replace('/events'); return null; } // início da app instalada
   if (path === '/logo-options') return <Suspense fallback={null}><LogoOptions /></Suspense>;
   if (path === '/events') return <Suspense fallback={null}><Discover /></Suspense>;
   if (path === '/register') return cfg.selfRegistration ? <Register /> : <RegistrationClosed />;
@@ -57,6 +60,7 @@ function App() {
   return <Home canRegister={cfg.selfRegistration} />;
 }
 
+captureInstallPrompt();
 installTranslator();
 createRoot(document.getElementById('root')!).render(<StrictMode><Suspense fallback={null}><App /></Suspense>{location.pathname !== '/events' && <BackToTop />}</StrictMode>);
 if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('/sw.js').catch(() => {});

@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomInt, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
@@ -6,6 +6,7 @@ import { WalletError, WalletService, hashToken, type Db, type Tx } from './walle
 import { queueMail, type Mailer } from './mailer';
 import { normalizeMsisdn, type Mpesa } from './mpesa';
 import { authorizeUrl, exchangeCode, type GoogleConfig } from './google';
+import { normalizePhone, type Sms } from './sms';
 import { hashRecovery, newRecoveryCodes, newSecret, openSecret, otpauthUrl, sealSecret, verifyTotp } from './totp';
 
 export class HttpError extends Error {
@@ -42,6 +43,8 @@ export interface AppConfig {
   mpesa?: Mpesa | null;
   /** Entrada com Google (opcional). */
   google?: GoogleConfig | null;
+  /** Envio de SMS (códigos de confirmação do telemóvel). Sem ele, a entrada por telemóvel fica indisponível. */
+  sms?: Sms | null;
   /** Intervalo (ms) da verificação das cobranças M-Pesa por confirmar. */
   mpesaReconcileMs?: number;
   /** SÓ desenvolvimento: permite mostrar o site numa moldura (teste de larguras de telemóvel). Nunca em produção. */
@@ -91,6 +94,20 @@ export function createApp(db: Db, cfg: AppConfig) {
   });
   // as áreas de entrada (plataforma, empresas, contas) não devem aparecer em motores de busca
   app.use(/^\/(platform|company|account|newsletter)(\/|$)/, (_req, res, next) => { res.setHeader('X-Robots-Tag', 'noindex, nofollow'); next(); });
+  // manifestos da app instalável da equipa (um por empresa e um da plataforma); um endereço desconhecido recebe o genérico
+  const staffManifest = (name: string, start: string, theme = '#0B0820') => ({
+    id: start, name, short_name: 'Bilhete+ Equipa', description: 'Balcão, portaria e gestão de eventos.', lang: 'pt-MZ', start_url: start, scope: start, display: 'standalone', orientation: 'portrait',
+    background_color: '#0B0820', theme_color: theme,
+    icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' }, { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }],
+  });
+  app.get('/platform/manifest.webmanifest', (_req, res) => { res.type('application/manifest+json').set('Cache-Control', 'no-cache').json(staffManifest('Bilhete+ Administração', '/platform/')); });
+  app.get('/company/:slug/manifest.webmanifest', async (req, res, next) => {
+    try {
+      const o = (await db.query<any>(`SELECT trade_name FROM organizations WHERE slug=$1 AND status<>'DISABLED'`, [req.params.slug])).rows[0];
+      const slug = /^[a-z0-9-]{1,60}$/.test(req.params.slug) ? req.params.slug : '';
+      res.type('application/manifest+json').set('Cache-Control', 'no-cache').json(o && slug ? staffManifest(`Bilhete+ Equipa — ${o.trade_name}`, `/company/${slug}/`) : staffManifest('Bilhete+ Equipa', '/company/'));
+    } catch (e) { next(e); }
+  });
   const hits = new Map<string, { n: number; reset: number }>();
   const limit = (max: number | undefined) => (req: Request, _res: Response, next: NextFunction) => {
     if (!max) return next();
@@ -448,9 +465,9 @@ export function createApp(db: Db, cfg: AppConfig) {
   const bearer = (req: Request) => /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1] ?? null;
   const needAccount = async (req: Request) => {
     const t = bearer(req);
-    const r = t ? await db.query<any>(`SELECT a.id,a.name,a.email,a.phone,a.newsletter,(a.password_hash<>'-') AS "hasPassword" FROM account_sessions s JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=$1 AND s.expires_at>now() AND a.status='ACTIVE'`, [hashToken(t)]) : null;
+    const r = t ? await db.query<any>(`SELECT a.id,a.name,a.email,COALESCE(a.phone_e164,a.phone) AS phone,a.newsletter,(a.password_hash<>'-') AS "hasPassword" FROM account_sessions s JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=$1 AND s.expires_at>now() AND a.status='ACTIVE'`, [hashToken(t)]) : null;
     if (!r?.rows[0]) throw new HttpError(401, 'LOGIN_REQUIRED');
-    return r.rows[0] as { id: string; name: string; email: string; phone: string | null; hasPassword: boolean; newsletter: boolean };
+    return r.rows[0] as { id: string; name: string; email: string | null; phone: string | null; hasPassword: boolean; newsletter: boolean };
   };
   const validEmail = (v: unknown) => {
     const e = String(v ?? '').trim().toLowerCase();
@@ -540,7 +557,7 @@ export function createApp(db: Db, cfg: AppConfig) {
     return { ok: true };
   }));
   app.get('/platform/newsletter', ...staff('PLATFORM_ADMIN'), h(async () => ({
-    subscribers: (await db.query<any>(`SELECT count(*)::int AS c FROM accounts WHERE status='ACTIVE' AND newsletter`)).rows[0].c,
+    subscribers: (await db.query<any>(`SELECT count(*)::int AS c FROM accounts WHERE status='ACTIVE' AND newsletter AND email IS NOT NULL`)).rows[0].c,
     campaigns: (await db.query(`SELECT id,subject,recipients,created_at FROM newsletter_campaigns ORDER BY created_at DESC LIMIT 20`)).rows,
   })));
   /** Envia uma newsletter a todas as contas subscritas (ou só um teste para um e-mail). Cada mensagem leva a ligação para sair. */
@@ -554,13 +571,54 @@ export function createApp(db: Db, cfg: AppConfig) {
       await queueMail(db, cfg.mailer ?? null, db, { to, subject: '[TESTE] ' + subject, text: body + footer('00000000-0000-0000-0000-000000000000') });
       return { test: true, recipients: 1 };
     }
-    const subs = (await db.query<any>(`SELECT id,email FROM accounts WHERE status='ACTIVE' AND newsletter ORDER BY created_at LIMIT 5000`)).rows;
+    const subs = (await db.query<any>(`SELECT id,email FROM accounts WHERE status='ACTIVE' AND newsletter AND email IS NOT NULL ORDER BY created_at LIMIT 5000`)).rows;
     await db.transaction(async (tx) => {
       for (const s of subs) await queueMail(db, cfg.mailer ?? null, tx, { to: s.email, subject, text: body + footer(s.id) });
       await tx.query('INSERT INTO newsletter_campaigns(subject,body,sent_by,recipients) VALUES($1,$2,$3,$4)', [subject, body, req.user!.id, subs.length]);
       await audit(tx, req.user, 'newsletter.send', 'newsletter', undefined, { subject, recipients: subs.length });
     });
     return { test: false, recipients: subs.length };
+  }));
+
+  // ---------- entrada por telemóvel (código por SMS) ----------
+  const codeHash = (phone: string, code: string) => createHmac('sha256', cfg.tokenSecret).update(`phone:${phone}:${code}`).digest('hex');
+  /** Pede o código. A resposta é sempre a mesma (não revela se o número já tem conta). */
+  app.post('/account/phone/start', limit(cfg.loginRateLimit), h(async (req) => {
+    if (!cfg.sms) throw new HttpError(409, 'a entrada por telemóvel não está disponível');
+    const phone = normalizePhone(String(req.body?.phone ?? ''));
+    if (!phone) throw new HttpError(400, 'número de telemóvel inválido (por exemplo 84 123 4567)');
+    // no máximo 3 códigos por número em 15 minutos (evita gastar SMS e incomodar quem não os pediu)
+    const recent = (await db.query<any>(`SELECT count(*)::int AS c FROM phone_codes WHERE phone=$1 AND created_at > now() - interval '15 minutes'`, [phone])).rows[0].c;
+    if (recent >= 3) throw new HttpError(429, 'já enviámos vários códigos para este número, aguarde alguns minutos');
+    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    await db.query(`INSERT INTO phone_codes(phone,code_hash,expires_at) VALUES($1,$2,now()+interval '10 minutes')`, [phone, codeHash(phone, code)]);
+    await db.query(`DELETE FROM phone_codes WHERE created_at < now() - interval '1 day'`);
+    try { await cfg.sms.send(phone, `Bilhete+: o seu código é ${code}. Vale 10 minutos. Não o partilhe com ninguém.`); }
+    catch (e) { console.error('sms', e); throw new HttpError(502, 'não foi possível enviar o SMS agora, tente novamente'); }
+    return { sent: true };
+  }));
+  /** Confirma o código: entra na conta do número ou cria uma (o nome é pedido só na primeira vez). */
+  app.post('/account/phone/verify', limit(cfg.loginRateLimit), h(async (req) => {
+    if (!cfg.sms) throw new HttpError(409, 'a entrada por telemóvel não está disponível');
+    const phone = normalizePhone(String(req.body?.phone ?? ''));
+    const code = String(req.body?.code ?? '').replace(/\D/g, '');
+    if (!phone || code.length !== 6) throw new HttpError(400, 'código inválido');
+    const name = String(req.body?.name ?? '').trim().slice(0, 120);
+    // cada tentativa conta (certa ou errada) e fica registada mesmo que o pedido falhe: no máximo 5 por código
+    const pc = (await db.query<any>(`UPDATE phone_codes SET attempts=attempts+1 WHERE id=(SELECT id FROM phone_codes WHERE phone=$1 AND expires_at>now() ORDER BY created_at DESC LIMIT 1) RETURNING id,code_hash,attempts`, [phone])).rows[0];
+    if (!pc || pc.attempts > 5) throw new HttpError(401, 'código inválido ou expirado');
+    const want = codeHash(phone, code);
+    if (pc.code_hash.length !== want.length || !timingSafeEqual(Buffer.from(pc.code_hash), Buffer.from(want))) throw new HttpError(401, 'código inválido ou expirado');
+    const accountId = await db.transaction(async (tx) => {
+      const ex = (await tx.query<any>(`SELECT id FROM accounts WHERE phone_e164=$1 AND status='ACTIVE'`, [phone])).rows[0];
+      if (ex) { await tx.query('DELETE FROM phone_codes WHERE phone=$1', [phone]); return ex.id as string; }
+      if (name.length < 2) throw new HttpError(400, 'indique o seu nome'); // o código continua válido para a nova tentativa
+      const id = (await tx.query<any>(`INSERT INTO accounts(email,name,phone,phone_e164,password_hash,email_verified,newsletter) VALUES(NULL,$1,$2,$2,'-',false,false) RETURNING id`, [name, phone])).rows[0].id as string;
+      await tx.query('DELETE FROM phone_codes WHERE phone=$1', [phone]);
+      return id;
+    });
+    const a = (await db.query<any>('SELECT name,phone_e164 AS phone FROM accounts WHERE id=$1', [accountId])).rows[0];
+    return { token: await accountSession(accountId), account: { name: a.name, email: null, phone: a.phone } };
   }));
 
   app.post('/account/register', limit(cfg.loginRateLimit), h(async (req) => {
@@ -614,9 +672,9 @@ export function createApp(db: Db, cfg: AppConfig) {
     const a = await needAccount(req as Request);
     const cur = (await db.query<any>('SELECT password_hash FROM accounts WHERE id=$1', [a.id])).rows[0];
     // contas só Google não têm palavra-passe: confirmam escrevendo o e-mail
-    if (a.hasPassword ? !checkPassword(String(req.body?.password ?? ''), cur.password_hash) : String(req.body?.confirm ?? '').trim().toLowerCase() !== a.email) throw new HttpError(401, a.hasPassword ? 'palavra-passe incorrecta' : 'escreva o seu e-mail para confirmar');
+    if (a.hasPassword ? !checkPassword(String(req.body?.password ?? ''), cur.password_hash) : (a.email ? String(req.body?.confirm ?? '').trim().toLowerCase() !== a.email : normalizePhone(String(req.body?.confirm ?? '')) !== a.phone)) throw new HttpError(401, a.hasPassword ? 'palavra-passe incorrecta' : a.email ? 'escreva o seu e-mail para confirmar' : 'escreva o seu número de telemóvel para confirmar');
     await db.transaction(async (tx) => {
-      await tx.query(`UPDATE accounts SET status='DELETED',email='apagada-'||id||'@removido.invalid',name='Conta apagada',phone=NULL,password_hash='-' WHERE id=$1`, [a.id]);
+      await tx.query(`UPDATE accounts SET status='DELETED',email='apagada-'||id||'@removido.invalid',name='Conta apagada',phone=NULL,phone_e164=NULL,password_hash='-' WHERE id=$1`, [a.id]);
       await tx.query('DELETE FROM account_sessions WHERE account_id=$1', [a.id]);
     });
     return { ok: true };
@@ -633,7 +691,7 @@ export function createApp(db: Db, cfg: AppConfig) {
   app.post('/public/events/:sub/orders', h(async (req) => {
     const account = await needAccount(req as Request); // comprar exige sessão iniciada
     const ev = await publicEvent(req.params.sub);
-    const body = { ...req.body, buyerName: req.body?.buyerName || account.name, buyerContact: req.body?.buyerContact || account.email };
+    const body = { ...req.body, buyerName: req.body?.buyerName || account.name, buyerContact: req.body?.buyerContact || account.email || account.phone };
     const r = await db.transaction(async (tx) => {
       const c = await createOrder(tx, ev, 'ONLINE', body, 'DIGITAL');
       await tx.query('UPDATE ticket_orders SET account_id=$2 WHERE id=$1', [c.orderId, account.id]);
@@ -1000,7 +1058,7 @@ export function createApp(db: Db, cfg: AppConfig) {
   }));
 
   // ---------- leitura para a interface ----------
-  app.get('/public/config', h(async () => ({ baseDomain: cfg.baseDomain ?? null, publicUrl: cfg.publicUrl ?? null, simulator: !!cfg.simulator, selfRegistration: !!cfg.selfRegistration, mpesa: !!cfg.mpesa, google: !!cfg.google })));
+  app.get('/public/config', h(async () => ({ baseDomain: cfg.baseDomain ?? null, publicUrl: cfg.publicUrl ?? null, simulator: !!cfg.simulator, selfRegistration: !!cfg.selfRegistration, mpesa: !!cfg.mpesa, google: !!cfg.google, phone: !!cfg.sms })));
   /** Só sandbox: equivale a um webhook de sucesso do prestador. */
   app.post('/public/simulate-payment', h(async (req) => {
     if (!cfg.simulator) throw new HttpError(404, 'indisponível');

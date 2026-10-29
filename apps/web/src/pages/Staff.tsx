@@ -72,6 +72,14 @@ export function Staff({ orgSlug, area, cfg }: { orgSlug?: string; area?: 'platfo
   const [me, setMe] = useState<any>(undefined);
   const [org, setOrg] = useState<OrgArea | null | undefined>(orgSlug ? undefined : null);
   useEffect(() => { if (orgSlug) api('GET', `/public/org/${orgSlug}`).then(setOrg).catch(() => setOrg(null)); }, [orgSlug]);
+  // a app instalável da equipa: o manifesto traz o nome e o endereço da área (empresa ou plataforma)
+  useEffect(() => {
+    const href = area === 'platform' ? '/platform/manifest.webmanifest' : orgSlug ? `/company/${orgSlug}/manifest.webmanifest` : null;
+    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    if (!href || !link) return;
+    const before = link.href; link.href = href;
+    return () => { link.href = before; };
+  }, [orgSlug, area]);
   const load = () => {
     if (!getToken()) return setMe(null);
     api('GET', '/me').then((m) => {

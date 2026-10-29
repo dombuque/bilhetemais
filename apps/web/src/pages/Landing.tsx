@@ -1,5 +1,6 @@
 import { locale } from '../i18n';
 import { useAccountName } from '../accountName';
+import { InstallButton } from '../install';
 import { useEffect, useRef, useState } from 'react';
 import './landing.css';
 import { api, eventUrl, mt } from '../api';
@@ -40,7 +41,7 @@ export function Home({ canRegister }: { canRegister: boolean }) {
       <header className={'lp-nav' + (solid ? ' solid' : '')}>
         <a href="/" aria-label="Bilhete+"><img src={solid ? "/logo-dark.svg" : "/logo-white.svg"} alt="Bilhete+" /></a>
         <nav aria-label="Secções"><a href="/events">Eventos</a><a href="#o-que-fazemos">O que fazemos</a><a href="#inclusao">Sem smartphone</a><a href="#como-funciona">Como funciona</a></nav>
-        <div className="go"><LangSwitch className="on-dark" /><a className="lp-btn ghost sm acct" href="/account">{acctName ? <><Icon n="users" />{acctName}</> : 'Entrar'}</a>{canRegister ? <a className="lp-btn sm" href="/register">Registar empresa</a> : <a className="lp-btn sm" href="/events">Explorar</a>}</div>
+        <div className="go"><LangSwitch className="on-dark" /><span className="inst-nav"><InstallButton label="Baixar app" className="lp-btn ghost sm" /></span><a className="lp-btn ghost sm acct" href="/account">{acctName ? <><Icon n="users" />{acctName}</> : 'Entrar'}</a>{canRegister ? <a className="lp-btn sm" href="/register">Registar empresa</a> : <a className="lp-btn sm" href="/events">Explorar</a>}</div>
       </header>
       {/* ===== HERO ===== */}
       <section className="lp-hero">
@@ -55,7 +56,7 @@ export function Home({ canRegister }: { canRegister: boolean }) {
               <div className="box"><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Procurar eventos, locais, organizadores" aria-label="Procurar eventos" /><button type="submit">Procurar</button></div>
               <div className="lp-chips">{QUICK.map(([qs, l]) => <a key={l} href={'/events' + qs}>{l}</a>)}</div>
             </form>
-            <div className="lp-cta-row"><a className="lp-btn" href="/events"><Icon n="pin" />Explorar no mapa</a>{canRegister && <a className="lp-btn ghost" href="/register">Registar empresa</a>}</div>
+            <div className="lp-cta-row"><a className="lp-btn" href="/events"><Icon n="pin" />Explorar no mapa</a><InstallButton label="Baixar app" className="lp-btn ghost" />{canRegister && <a className="lp-btn ghost" href="/register">Registar empresa</a>}</div>
           </div>
 
           <div className="lp-stage" aria-hidden="true">
