@@ -1,6 +1,6 @@
 # Bilhete+ — Estado do sistema e aceitação
 
-Produção: https://bilhetemais.semfila.online · Código: https://github.com/dombuque/bilhetemais · Testes automáticos: **32 testes da API** (PostgreSQL real, a correr por esquema isolado) + testes do M-Pesa, da carteira e da portaria.
+Produção: https://bilhetemais.live (backoffice da Bilhete+: https://platform.bilhetemais.live) · Código: https://github.com/dombuque/bilhetemais · Testes automáticos: **32 testes da API** (PostgreSQL real, a correr por esquema isolado) + testes do M-Pesa, da carteira e da portaria.
 
 ## 1. O que está feito e verificado
 

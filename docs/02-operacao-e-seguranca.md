@@ -25,7 +25,7 @@ As empresas **registam-se sozinhas** em `/register` (denominação, nome comerci
 4. Os e-mails de aprovação/rejeição são registados e só são enviados se o SMTP estiver configurado.
 
 ## Dois backoffices separados
-- **Bilhete+ (plataforma):** `/platform`. Só contas `PLATFORM_ADMIN` entram (o servidor recusa as restantes com a mesma mensagem genérica). Empresas, todos os eventos (cartões com receita), newsletter. Etiqueta «Bilhete+ · Plataforma» no menu.
+- **Bilhete+ (plataforma):** `https://platform.bilhetemais.live`. Só contas `PLATFORM_ADMIN` entram (o servidor recusa as restantes com a mesma mensagem genérica). Empresas, todos os eventos (cartões com receita), newsletter. Etiqueta «Bilhete+ · Plataforma» no menu.
 - **Empresa (tenant):** `/company/<identificador>`. Só a equipa dessa empresa entra. Etiqueta «Empresa · nome» no menu.
 - Os endereços das áreas privadas **não aparecem** em nenhuma página pública, não são indexáveis (`X-Robots-Tag: noindex`) e um identificador que não existe responde como um que existe. O antigo `/staff` já não existe (reencaminha para a página inicial).
 - Travões: limite por IP no login (`LOGIN_RATE_LIMIT`) e pausa de 15 minutos após 8 palavras-passe erradas seguidas para o mesmo e-mail.

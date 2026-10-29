@@ -4,7 +4,7 @@
 > **Câmara e NFC exigem HTTPS** (ou `localhost`). **NFC pelo navegador só funciona em Android com Chrome**; no iPhone use a câmara.
 
 ## 1. Administração Bilhete+
-1. Entre em `/platform` com a conta da plataforma (o endereço não é divulgado: guarde-o). Active a verificação em dois passos em «A minha conta».
+1. Entre em `https://platform.bilhetemais.live` com a conta da plataforma (o endereço não é divulgado: guarde-o). Active a verificação em dois passos em «A minha conta».
 2. **Criar uma empresa**: **Empresas → Nova empresa**. Preencha os dados e o administrador; a empresa fica **activa** e a palavra-passe inicial (gerada) é mostrada **uma única vez**: entregue-a ao responsável com o endereço de entrada da equipa.
 3. *(Só se o registo público estiver ligado)* **Empresas → Pendentes**: abra cada pedido, confira NUIT e documentos (descarregue-os) e escolha **Aprovar**, **Rejeitar** ou **Suspender** (rejeitar/suspender pedem motivo). A empresa recebe um e-mail, se o SMTP estiver configurado.
 3. Na ficha vê a equipa, os eventos e o endereço de entrada da empresa, só em leitura.

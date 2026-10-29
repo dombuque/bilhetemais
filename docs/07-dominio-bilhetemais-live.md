@@ -76,3 +76,5 @@ Depois `systemctl restart bilheteplus`. Na consola da Google (credenciais OAuth)
   token da Cloudflare restrito à zona `bilhetemais.live` em `/root/.secrets-bilhetemais-cf.ini` (permissões 600) — serve só para renovar.
 - `BASE_DOMAIN=bilhetemais.live` e `PUBLIC_URL=https://bilhetemais.live` em produção; nginx em `/etc/nginx/sites-available/bilhetemais_live`.
 - Verificado: `https://<evento>.bilhetemais.live` abre a página do evento com o seu tema; o domínio antigo `bilhetemais.semfila.online` continua a responder.
+- **Backoffice da Bilhete+:** `https://platform.bilhetemais.live` (o nome `platform` é reservado; `/platform` em qualquer outro endereço leva para lá).
+- O domínio antigo `bilhetemais.semfila.online` reencaminha (301) para `bilhetemais.live`.

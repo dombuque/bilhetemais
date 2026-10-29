@@ -1,4 +1,4 @@
-# Hospedagem do Bilhete+ em `bilhetemais.semfila.online`
+# Hospedagem do Bilhete+ (histórico: primeiro em `bilhetemais.semfila.online`, hoje em `bilhetemais.live` — ver docs/07)
 
 Segue o mesmo padrão do Nucleus e do semFila, na mesma máquina: **serviço `systemd` + script de arranque que carrega o `.env` + script de deploy + site Nginx próprio, numa porta própria (4100)**. Não altera nenhum serviço existente.
 
@@ -52,7 +52,7 @@ sudo certbot --nginx -d bilhetemais.semfila.online
 **7. Administrador da plataforma** (escolha você a palavra-passe; não a escreva no chat):
 ```
 cd /var/www/bilheteplus/apps/api
-sudo -u bilheteplus bash -c 'set -a; . ./.env; set +a; npx tsx scripts/create-admin.ts admin@semfila.online "Administrador" "PALAVRA-PASSE"'
+sudo -u bilheteplus bash -c 'set -a; . ./.env; set +a; npx tsx scripts/create-admin.ts admin@bilhetemais.live "Administrador" "PALAVRA-PASSE"'
 ```
 
 **8. Verificação:**
