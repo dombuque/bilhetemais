@@ -371,3 +371,4 @@ body:has(.shell) { background: #f4f2ee; }
 .login .brandpane .pp-tag { margin-bottom: 14px; }
 .side .brand { display: grid; gap: 10px; } .area-tag { font: 700 .62rem/1.2 ui-monospace, 'Cascadia Mono', Consolas, monospace; text-transform: uppercase; letter-spacing: .06em; padding: 5px 8px; width: max-content; max-width: 100%; overflow-wrap: anywhere; } .area-tag.plat { background: #5b2eff; color: #fff; } .area-tag.org { background: #5ce1ff; color: #0b0820; }
 .token-code code.short { font: 800 1.9rem/1 ui-monospace, "Cascadia Mono", Consolas, monospace; letter-spacing: .12em; padding: 10px 16px; } .token-code details { max-width: 100%; text-align: center; } .token-code summary { cursor: pointer; color: var(--muted); }
+.pub-bar { gap: 12px; } .pub-brand-name { font: 800 1.1rem var(--font-display); letter-spacing: -.01em; }
