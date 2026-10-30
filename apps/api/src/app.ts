@@ -241,7 +241,7 @@ export function createApp(db: Db, cfg: AppConfig) {
   app.post('/orgs', ...staff('PLATFORM_ADMIN'), h(async (req) => {
     const b = req.body;
     return db.transaction(async (tx) => {
-      const o = await tx.query<any>('INSERT INTO organizations(legal_name,trade_name,nuit,slug) VALUES($1,$2,$3,$4) RETURNING id',
+      const o = await tx.query<any>('INSERT INTO organizations(legal_name,trade_name,nuit,slug) VALUES($1,$2,$3,$4) RETURNING id,slug',
         [str(b.legalName, 'legalName'), str(b.tradeName, 'tradeName'), str(b.nuit, 'nuit'), await uniqueOrgSlug(tx, String(b.tradeName ?? ''))]);
       const adminPw = str(b.adminPassword, 'adminPassword');
       if (adminPw.length < 8) throw new HttpError(400, 'a palavra-passe deve ter pelo menos 8 caracteres');
@@ -250,6 +250,15 @@ export function createApp(db: Db, cfg: AppConfig) {
       const active = b.activate !== false; // criada pela administração: fica activa, salvo pedido em contrário
       if (active) await tx.query(`UPDATE organizations SET status='ACTIVE',reviewed_by=$2,reviewed_at=now() WHERE id=$1`, [o.rows[0].id, req.user!.id]);
       await audit(tx, req.user, 'org.create', 'organization', o.rows[0].id, { active });
+      // avisa por e-mail quem foi indicado como administrador da empresa (sem palavra-passe: essa foi combinada com a equipa Bilhete+)
+      await queueMail(db, cfg.mailer ?? null, tx, { to: b.adminEmail.toLowerCase(), organizationId: o.rows[0].id, subject: active ? 'A sua empresa foi criada — Bilhete+' : 'Registámos a sua empresa — Bilhete+',
+        text: `Olá ${str(b.adminName, 'adminName')},
+
+${active ? `A empresa ${str(b.tradeName, 'tradeName')} foi criada na Bilhete+ e já está activa. Já pode entrar e criar eventos.` : `A empresa ${str(b.tradeName, 'tradeName')} foi registada na Bilhete+ e aguarda aprovação. Enquanto não for aprovada, ao entrar verá «Empresa não aprovada».`}
+
+Área da sua equipa (guarde-a): ${cfg.publicUrl ?? ''}/company/${o.rows[0].slug}
+
+Bilhete+` });
       return { id: o.rows[0].id, status: active ? 'ACTIVE' : 'PENDING' };
     });
   }));

@@ -61,14 +61,17 @@ function Login({ onDone, org, slug, canRegister, area }: { onDone: () => void; o
 function NotApproved({ status, name, onExit }: { status: string; name?: string; onExit: () => void }) {
   const pending = status === 'PENDING';
   return (
-    <div className="main" style={{ display: 'grid', placeItems: 'center', minHeight: '70vh', padding: 24 }}>
-      <section className="card" style={{ maxWidth: 460, textAlign: 'center', display: 'grid', gap: 12 }}>
-        <h1 style={{ margin: 0 }}>Empresa não aprovada</h1>
-        <p className="muted" style={{ margin: 0 }}>{pending
-          ? `${name ? name + ' ainda' : 'A sua empresa ainda'} está a aguardar a aprovação da equipa Bilhete+. Quando for aprovada, avisamos por e-mail e esta área abre-se.`
-          : `${name ? name + ' está' : 'A sua empresa está'} sem acesso neste momento. Contacte o suporte Bilhete+.`}</p>
-        <button type="button" className="ghost" onClick={onExit}>Terminar sessão</button>
-      </section>
+    <div className="pp">
+      <header className="pp-top"><img src="/logo-dark.svg" alt="Bilhete+" /><span className="pp-top-r"><LangSwitch className="on-dark" /></span></header>
+      <section className="pp-hero"><span className="pp-label">[BP/ {pending ? 'A aguardar aprovação' : 'Sem acesso'}]</span><h1>Empresa não aprovada</h1></section>
+      <main className="pp-main">
+        <section className="pp-card pp-wide">
+          <p className="pp-sub">{pending
+            ? `${name ? name + ' ainda' : 'A sua empresa ainda'} está a aguardar a aprovação da equipa Bilhete+. Quando for aprovada, avisamos por e-mail e esta área abre-se.`
+            : `${name ? name + ' está' : 'A sua empresa está'} sem acesso neste momento. Contacte o suporte Bilhete+.`}</p>
+          <button type="button" className="pp-btn alt" onClick={onExit}>Terminar sessão</button>
+        </section>
+      </main>
     </div>
   );
 }
