@@ -262,6 +262,50 @@ Bilhete+` });
       return { id: o.rows[0].id, status: active ? 'ACTIVE' : 'PENDING' };
     });
   }));
+  // utilizadores geridos no backoffice: administradores Bilhete+ e equipas das empresas
+  app.get('/platform/users', ...staff('PLATFORM_ADMIN'), h(async () =>
+    (await db.query<any>(`SELECT u.id,u.name,u.email,u.role,u.status,u.created_at,o.trade_name AS organization,o.id AS organization_id FROM users u LEFT JOIN organizations o ON o.id=u.organization_id ORDER BY (u.role='PLATFORM_ADMIN') DESC, o.trade_name NULLS FIRST, u.created_at`)).rows));
+  app.post('/platform/users', ...staff('PLATFORM_ADMIN'), h(async (req) => {
+    const b = req.body ?? {};
+    const role = str(b.role, 'função') as Role;
+    if (!['PLATFORM_ADMIN', 'ORG_ADMIN', 'CASHIER', 'GATE_OPERATOR'].includes(role)) throw new HttpError(400, 'função inválida');
+    const email = str(b.email, 'e-mail').toLowerCase();
+    if (!EMAIL.test(email)) throw new HttpError(400, 'e-mail inválido');
+    const pw = str(b.password, 'palavra-passe');
+    if (pw.length < 8) throw new HttpError(400, 'a palavra-passe deve ter pelo menos 8 caracteres');
+    let orgId: string | null = null;
+    if (role !== 'PLATFORM_ADMIN') {
+      const o = (await db.query<any>('SELECT id FROM organizations WHERE id=$1', [b.organizationId])).rows[0];
+      if (!o) throw new HttpError(404, 'empresa não encontrada');
+      orgId = o.id;
+    }
+    const dup = (await db.query<any>('SELECT 1 FROM users WHERE lower(email)=$1', [email])).rows[0];
+    if (dup) throw new HttpError(409, 'já existe um utilizador com este e-mail');
+    const r = await db.query<any>(`INSERT INTO users(organization_id,email,name,password_hash,role) VALUES($1,$2,$3,$4,$5) RETURNING id`, [orgId, email, str(b.name, 'nome'), hashPassword(pw), role]);
+    await audit(db, req.user, 'user.create', 'user', r.rows[0].id, { role, organizationId: orgId, by: 'platform' });
+    return { id: r.rows[0].id };
+  }));
+  app.patch('/platform/users/:id', ...staff('PLATFORM_ADMIN'), h(async (req) => {
+    if (!/^[0-9a-f-]{36}$/.test(req.params.id)) throw new HttpError(404, 'utilizador não encontrado');
+    const status = req.body?.status;
+    if (!['ACTIVE', 'DISABLED'].includes(status)) throw new HttpError(400, 'estado inválido');
+    if (req.params.id === req.user!.id) throw new HttpError(400, 'não pode desactivar a sua própria conta');
+    const r = await db.query<any>('UPDATE users SET status=$2 WHERE id=$1 RETURNING id', [req.params.id, status]);
+    if (!r.rows[0]) throw new HttpError(404, 'utilizador não encontrado');
+    if (status === 'DISABLED') await db.query('DELETE FROM sessions WHERE user_id=$1', [req.params.id]);
+    await audit(db, req.user, 'user.status', 'user', req.params.id, { status, by: 'platform' });
+    return { id: req.params.id, status };
+  }));
+  app.post('/platform/users/:id/password', ...staff('PLATFORM_ADMIN'), h(async (req) => {
+    if (!/^[0-9a-f-]{36}$/.test(req.params.id)) throw new HttpError(404, 'utilizador não encontrado');
+    const pw = str(req.body?.password, 'palavra-passe');
+    if (pw.length < 8) throw new HttpError(400, 'a palavra-passe deve ter pelo menos 8 caracteres');
+    const r = await db.query<any>('UPDATE users SET password_hash=$2 WHERE id=$1 RETURNING id', [req.params.id, hashPassword(pw)]);
+    if (!r.rows[0]) throw new HttpError(404, 'utilizador não encontrado');
+    await db.query('DELETE FROM sessions WHERE user_id=$1', [req.params.id]);
+    await audit(db, req.user, 'user.password_reset', 'user', req.params.id, { by: 'platform' });
+    return { ok: true };
+  }));
   // e-mails de suporte (backoffice): quem recebe o aviso de cada empresa registada
   app.get('/platform/support-emails', ...staff('PLATFORM_ADMIN'), h(async () => (await db.query<any>('SELECT id,email,created_at FROM support_emails ORDER BY created_at')).rows));
   app.post('/platform/support-emails', ...staff('PLATFORM_ADMIN'), h(async (req) => {

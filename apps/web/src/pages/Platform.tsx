@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, dt, eventShareUrl, eventUrl, getToken, mt } from '../api';
 import { inApp } from '../i18n';
 import { NewsletterAdmin } from './Newsletter';
-import { Empty, Field, Icon, Layout, Modal, PageHead, Pill, Skeleton, useAction, useToast } from '../ui';
+import { Empty, Field, Icon, Layout, PageHead, Pill, Skeleton, useAction, useToast } from '../ui';
 
 const ROLE_LABEL: Record<string, string> = { ORG_ADMIN: 'Administrador da empresa', CASHIER: 'Balcão / caixa', MERCHANT_OPERATOR: 'Operador de comerciante', GATE_OPERATOR: 'Controlo de acessos', PLATFORM_ADMIN: 'Administrador Bilhete+' };
 const FILTERS = [['PENDING', 'Pendentes'], ['ACTIVE', 'Activas'], ['all', 'Todas']] as const;
@@ -22,8 +22,9 @@ export function Platform({ me }: { me: any }) {
   useEffect(() => { if (orgs && filter === 'PENDING' && pending === 0) setFilter('all'); }, [orgs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <Layout me={me} nav={[{ id: 'orgs', label: 'Empresas', icon: 'building' }, { id: 'events', label: 'Eventos', icon: 'ticket' }, { id: 'newsletter', label: 'Newsletter', icon: 'mail' }, { id: 'support', label: 'Suporte', icon: 'users' }]} view={view} onView={setView}>
-      {view === 'events' ? <AllEvents /> : view === 'newsletter' ? <NewsletterAdmin toast={toast.show} /> : view === 'support' ? <SupportEmails toast={toast.show} /> : <>
+    <Layout me={me} nav={[{ id: 'orgs', label: 'Empresas', icon: 'building' }, { id: 'events', label: 'Eventos', icon: 'ticket' }, { id: 'newsletter', label: 'Newsletter', icon: 'mail' }, { id: 'users', label: 'Utilizadores', icon: 'users' }, { id: 'support', label: 'Suporte', icon: 'mail' }]} view={view} onView={setView}>
+      {view === 'events' ? <AllEvents /> : view === 'newsletter' ? <NewsletterAdmin toast={toast.show} /> : view === 'support' ? <SupportEmails toast={toast.show} /> : view === 'users' ? <UsersAdmin orgs={orgs ?? []} meId={me.id} toast={toast.show} /> : <>
+      <div hidden={creating || !!sel}>
       <PageHead title="Empresas" sub={`${orgs?.length ?? 0} empresa${orgs?.length === 1 ? '' : 's'}${pending ? ` · ${pending} a aguardar aprovação` : ''}`} actions={<button onClick={() => setCreating(true)}><Icon n="plus" />Nova empresa</button>} />
       <div className="seg" role="tablist" style={{ marginBottom: 16 }}>{FILTERS.map(([k, l]) => <button key={k} role="tab" aria-selected={filter === k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>{l}{k === 'PENDING' && pending > 0 ? ` (${pending})` : ''}</button>)}</div>
       <div className="card">
@@ -35,11 +36,69 @@ export function Platform({ me }: { me: any }) {
                 <td data-l="Responsável">{o.contact_name}<br /><small className="muted">{o.phone}</small></td><td data-l="Backoffice" onClick={(e) => e.stopPropagation()}><a href={`/company/${o.slug}`} target="_blank" rel="noopener noreferrer" className="mono small">/company/{o.slug}</a><br /><button type="button" className="ghost sm" onClick={() => navigator.clipboard?.writeText(`${location.origin}/company/${o.slug}`)}><Icon n="copy" />Copiar link</button></td><td data-l="Documentos">{o.documents}</td>
                 <td data-l="Registo">{dt(o.created_at)}</td><td data-l="Estado"><Pill s={o.status} /></td></tr>))}</tbody></table>)}
       </div>
+      </div>
       {creating && <NewOrg toast={toast.show} onClose={() => { setCreating(false); load(); }} />}
       {sel && <Review id={sel} onClose={() => { setSel(null); load(); }} toast={toast.show} />}
       </>}
       {toast.node}
     </Layout>
+  );
+}
+
+const ROLE_OPTIONS: [string, string][] = [['PLATFORM_ADMIN', 'Administrador Bilhete+'], ['ORG_ADMIN', 'Administrador da empresa'], ['CASHIER', 'Balcão / caixa'], ['GATE_OPERATOR', 'Controlo de acessos']];
+
+/** Utilizadores: administradores Bilhete+ e equipas das empresas. Adicionar, desactivar e repor palavra-passe, tudo inline. */
+function UsersAdmin({ orgs, meId, toast }: { orgs: any[]; meId: string; toast: (m: string, e?: boolean) => void }) {
+  const [list, setList] = useState<any[] | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [f, setF] = useState({ name: '', email: '', role: 'PLATFORM_ADMIN', organizationId: '', password: genPassword() });
+  const [shown, setShown] = useState<{ email: string; password: string } | null>(null);
+  const [resetFor, setResetFor] = useState<string | null>(null);
+  const [newPw, setNewPw] = useState('');
+  const { busy, run } = useAction(toast);
+  const load = useCallback(() => api('GET', '/platform/users').then(setList), []);
+  useEffect(() => { load(); }, [load]);
+  const set = (k: keyof typeof f) => (e: any) => setF({ ...f, [k]: e.target.value });
+  const ready = f.name.trim() && /\S+@\S+\.\S+/.test(f.email) && f.password.length >= 8 && (f.role === 'PLATFORM_ADMIN' || f.organizationId);
+  return (
+    <>
+      <PageHead title="Utilizadores" sub="Administradores da Bilhete+ e equipas das empresas." actions={!adding && <button onClick={() => { setAdding(true); setShown(null); }}><Icon n="plus" />Novo utilizador</button>} />
+      {shown && <div className="card stack"><p style={{ margin: 0 }}>Utilizador criado. Entregue estes dados; a palavra-passe <b>não volta a ser mostrada</b>.</p>
+        <div className="card flat mono">E-mail: {shown.email}<br />Palavra-passe: {shown.password}</div>
+        <div className="inline"><button onClick={() => navigator.clipboard?.writeText(`E-mail: ${shown.email}\nPalavra-passe: ${shown.password}`)}><Icon n="copy" />Copiar</button><button className="ghost" onClick={() => setShown(null)}>Fechar</button></div></div>}
+      {adding && <div className="card stack">
+        <h2 style={{ margin: 0 }}>Novo utilizador</h2>
+        <div className="field-row">
+          <Field label="Nome"><input value={f.name} onChange={set('name')} autoFocus /></Field>
+          <Field label="E-mail"><input type="email" value={f.email} onChange={set('email')} /></Field>
+        </div>
+        <div className="field-row">
+          <Field label="Função"><select value={f.role} onChange={set('role')}>{ROLE_OPTIONS.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
+          {f.role !== 'PLATFORM_ADMIN' && <Field label="Empresa"><select value={f.organizationId} onChange={set('organizationId')}><option value="">Escolha…</option>{orgs.map((o) => <option key={o.id} value={o.id}>{o.trade_name}</option>)}</select></Field>}
+        </div>
+        <Field label="Palavra-passe inicial" hint="Gerada automaticamente; o utilizador pode alterá-la em «A minha conta»."><div className="inline" style={{ flexWrap: 'nowrap' }}><input value={f.password} onChange={set('password')} className="mono" /><button type="button" className="ghost" onClick={() => setF({ ...f, password: genPassword() })}>Gerar</button></div></Field>
+        <div className="inline">
+          <button disabled={busy || !ready} onClick={() => run(async () => { await api('POST', '/platform/users', f); setShown({ email: f.email, password: f.password }); setAdding(false); setF({ name: '', email: '', role: 'PLATFORM_ADMIN', organizationId: '', password: genPassword() }); await load(); })}>{busy ? 'A criar…' : 'Criar utilizador'}</button>
+          <button className="ghost" onClick={() => setAdding(false)}>Cancelar</button>
+        </div>
+      </div>}
+      <div className="card">
+        {!list ? <Skeleton rows={4} /> : list.length === 0 ? <Empty icon="users">Sem utilizadores.</Empty> : (
+          <table className="resp"><thead><tr><th>Nome</th><th>Função</th><th>Empresa</th><th>Estado</th><th /></tr></thead>
+            <tbody>{list.map((u) => (
+              <tr key={u.id}>
+                <td data-l="Nome"><b>{u.name}</b><br /><small className="muted">{u.email}</small></td>
+                <td data-l="Função">{ROLE_LABEL[u.role] ?? u.role}</td>
+                <td data-l="Empresa">{u.organization ?? 'Bilhete+'}</td>
+                <td data-l="Estado"><Pill s={u.status} /></td>
+                <td className="nolabel">
+                  {resetFor === u.id
+                    ? <span className="inline"><input className="mono" value={newPw} onChange={(e) => setNewPw(e.target.value)} aria-label="Nova palavra-passe" /><button className="sm" disabled={busy || newPw.length < 8} onClick={() => run(async () => { await api('POST', `/platform/users/${u.id}/password`, { password: newPw }); setResetFor(null); setNewPw(''); }, 'Palavra-passe reposta')}>Repor</button><button className="ghost sm" onClick={() => setResetFor(null)}>Cancelar</button></span>
+                    : <span className="inline"><button className="ghost sm" onClick={() => { setResetFor(u.id); setNewPw(genPassword()); }}>Repor palavra-passe</button>
+                      {u.id !== meId && <button className="ghost sm" disabled={busy} onClick={() => run(async () => { await api('PATCH', `/platform/users/${u.id}`, { status: u.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE' }); await load(); }, u.status === 'ACTIVE' ? 'Utilizador desactivado' : 'Utilizador activado')}>{u.status === 'ACTIVE' ? 'Desactivar' : 'Activar'}</button>}</span>}
+                </td></tr>))}</tbody></table>)}
+      </div>
+    </>
   );
 }
 
@@ -65,6 +124,17 @@ function SupportEmails({ toast }: { toast: (m: string, e?: boolean) => void }) {
   );
 }
 
+/** Detalhe aberto no próprio ecrã (sem janelas): título, «Voltar» e o conteúdo. */
+function Panel({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="stack">
+      <a href="#back" onClick={(e) => { e.preventDefault(); onClose(); window.scrollTo(0, 0); }} className="crumb"><Icon n="back" />Voltar</a>
+      <PageHead title={title} />
+      <div className="card stack">{children}</div>
+    </div>
+  );
+}
+
 /** Todos os eventos da plataforma, em cartões com a imagem, e o rendimento de cada um ao abrir. */
 function AllEvents() {
   const [rows, setRows] = useState<any[] | null>(null);
@@ -73,6 +143,7 @@ function AllEvents() {
   return (
     <>
       <PageHead title="Eventos" sub={`${rows?.length ?? 0} evento${rows?.length === 1 ? '' : 's'} em todas as empresas`} />
+      <div hidden={!!sel}>
       {!rows ? <Skeleton rows={4} /> : rows.length === 0 ? <div className="card"><Empty icon="ticket">Ainda não há eventos.</Empty></div> : (
         <div className="evgrid">
           {rows.map((e) => {
@@ -92,6 +163,7 @@ function AllEvents() {
           })}
         </div>
       )}
+      </div>
       {sel && <EventEarnings ev={sel} onClose={() => setSel(null)} />}
     </>
   );
@@ -102,7 +174,7 @@ function EventEarnings({ ev, onClose }: { ev: any; onClose: () => void }) {
   const [d, setD] = useState<any>(null);
   useEffect(() => { api('GET', `/platform/events/${ev.id}/summary`).then(setD); }, [ev.id]);
   return (
-    <Modal title={ev.name} onClose={onClose}>
+    <Panel title={ev.name} onClose={onClose}>
       {!d ? <Skeleton /> : <>
         <div className="between"><span className="muted">{d.event.organization} · {dt(d.event.starts_at)}</span><Pill s={d.event.status} /></div>
         <div className="earn"><span className="mono small">Total ganho</span><b>{mt(d.totalMinor)}</b><span className="muted small">bilhetes {mt(d.tickets.revenueMinor)} + consumos na carteira {mt(d.wallets.spentMinor)}</span></div>
@@ -117,7 +189,7 @@ function EventEarnings({ ev, onClose }: { ev: any; onClose: () => void }) {
           {d.byType.map((t: any) => <div className="between small" key={t.name}><span>{t.name}</span><span className="muted">{t.sold} · {mt(t.revenueMinor)}</span></div>)}</div>
         {ev.subdomain && <a className="btn ghost" href={inApp() ? eventUrl(ev.subdomain) : eventShareUrl(ev.subdomain)} {...(inApp() ? {} : { target: '_blank', rel: 'noopener noreferrer' })}>Abrir página do evento</a>}
       </>}
-    </Modal>
+    </Panel>
   );
 }
 
@@ -136,7 +208,7 @@ function Review({ id, onClose, toast }: { id: string; onClose: () => void; toast
     const a = document.createElement('a'); a.href = url; a.download = d.filename; a.click(); setTimeout(() => URL.revokeObjectURL(url), 2000);
   });
   return (
-    <Modal title={o?.trade_name ?? 'Empresa'} onClose={onClose}>
+    <Panel title={o?.trade_name ?? 'Empresa'} onClose={onClose}>
       {!o ? <Skeleton /> : <>
         <div className="between"><span className="muted">{o.legal_name}</span><Pill s={o.status} /></div>
         <table><tbody>
@@ -158,7 +230,7 @@ function Review({ id, onClose, toast }: { id: string; onClose: () => void; toast
           {o.status === 'ACTIVE' && <button className="danger ghost" disabled={busy || !reason.trim()} onClick={() => decide('SUSPENDED')}>Suspender</button>}
         </div>
       </>}
-    </Modal>
+    </Panel>
   );
 }
 
@@ -179,7 +251,7 @@ function NewOrg({ toast, onClose }: { toast: (m: string, e?: boolean) => void; o
   if (done) {
     const link = `${location.origin}/company/${done.slug}`;
     return (
-      <Modal title="Empresa criada" onClose={onClose}>
+      <Panel title="Empresa criada" onClose={onClose}>
         <p>A empresa já está <b>activa</b>. Entregue estes dados ao responsável; a palavra-passe <b>não volta a ser mostrada</b>.</p>
         <div className="card flat stack-sm mono">
           <div>Entrada: {link}</div><div>E-mail: {done.email}</div><div>Palavra-passe: {done.password}</div>
@@ -188,11 +260,11 @@ function NewOrg({ toast, onClose }: { toast: (m: string, e?: boolean) => void; o
 E-mail: ${done.email}
 Palavra-passe: ${done.password}`)}><Icon n="copy" />Copiar dados</button>
         <button className="ghost" onClick={onClose}>Fechar</button>
-      </Modal>
+      </Panel>
     );
   }
   return (
-    <Modal title="Nova empresa" onClose={onClose}>
+    <Panel title="Nova empresa" onClose={onClose}>
       <div className="field-row">
         <Field label="Denominação legal"><input value={f.legalName} onChange={set('legalName')} autoFocus /></Field>
         <Field label="Nome comercial"><input value={f.tradeName} onChange={set('tradeName')} /></Field>
@@ -205,6 +277,6 @@ Palavra-passe: ${done.password}`)}><Icon n="copy" />Copiar dados</button>
       </div>
       <Field label="Palavra-passe inicial" hint="Gerada automaticamente. O responsável pode alterá-la em «A minha conta»."><div className="inline" style={{ flexWrap: 'nowrap' }}><input value={f.adminPassword} onChange={set('adminPassword')} className="mono" /><button type="button" className="ghost" onClick={() => setF({ ...f, adminPassword: genPassword() })}>Gerar outra</button></div></Field>
       <button className="big wide" disabled={busy || !ready} onClick={create}>{busy ? 'A criar…' : 'Criar empresa'}</button>
-    </Modal>
+    </Panel>
   );
 }
