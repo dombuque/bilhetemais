@@ -420,3 +420,7 @@ html { height: 100%; } body { min-height: 100%; }
 @media (max-width: 860px) { .login .brandpane { display: none !important; } .login .formpane { min-height: 100svh; align-content: start; padding-top: 28px; } }
 /* barra de baixo da equipa no telemóvel: só os separadores (o logótipo e a etiqueta da área ocupavam o ecrã e deixavam a barra alta e fora do fundo) */
 @media (max-width: 860px) { .shell .side .brand, .shell .side .who { display: none !important; } .shell .side { justify-content: space-around; align-items: stretch; padding: 4px 4px max(6px, env(safe-area-inset-bottom)); } .shell .navbtn { min-width: 0; flex: 1; } .shell .navbtn span, .shell .navbtn { text-overflow: ellipsis; } .shell .topbar .area-tag { display: inline-block; } }
+
+/* barra do evento: sólida (sem desfocado sobre a capa) e com botão voltar */
+.pub-bar { background: var(--surface); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.pub-bar .pub-back { flex: none; width: 40px; height: 40px; margin-left: -8px; border-radius: 50%; display: inline-grid; place-items: center; color: var(--text); } .pub-bar .pub-back svg { width: 22px; height: 22px; } .pub-bar .pub-back:active { background: var(--line); }
