@@ -462,3 +462,7 @@ body:has(.app-back) .pp-top, body:has(.app-back) .pub-bar { padding-left: 62px; 
 
 /* painéis que antes eram janelas */
 .inline-panel { scroll-margin-top: 16px; margin: 16px 0; border: 1.5px solid var(--line-strong, #cfcae6); max-width: 720px; }
+
+/* um só «voltar»: se o ecrã já tem o seu (cabeçalho do evento/bilhete), o botão flutuante da app esconde-se */
+body:has(.pub-back) .app-back { display: none; }
+body:has(.pub-back) .pub-bar { padding-left: 20px; }
