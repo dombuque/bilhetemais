@@ -115,9 +115,9 @@ export function createApp(db: Db, cfg: AppConfig) {
     } catch (e) { next(e); }
   });
   const hits = new Map<string, { n: number; reset: number }>();
-  const limit = (max: number | undefined) => (req: Request, _res: Response, next: NextFunction) => {
+  const limit = (max: number | undefined, name = '') => (req: Request, _res: Response, next: NextFunction) => {
     if (!max) return next();
-    const k = req.ip + req.baseUrl + req.path.split('/').slice(0, 3).join('/'), now = Date.now(), e = hits.get(k);
+    const k = req.ip + req.baseUrl + req.path.split('/').slice(0, 3).join('/') + name, now = Date.now(), e = hits.get(k);
     if (!e || e.reset < now) hits.set(k, { n: 1, reset: now + 60_000 });
     else if (++e.n > max) return next(new HttpError(429, 'demasiados pedidos, tente mais tarde'));
     if (hits.size > 10_000) for (const [kk, v] of hits) if (v.reset < now) hits.delete(kk);
@@ -560,7 +560,7 @@ export function createApp(db: Db, cfg: AppConfig) {
   };
   const cookieOf = (req: Request, name: string) => new RegExp(`(?:^|; )${name}=([^;]+)`).exec(req.headers.cookie ?? '')?.[1] ?? null;
   const secureCookie = (cfg.publicUrl ?? '').startsWith('https://');
-  app.get('/account/google/start', limit(cfg.loginRateLimit), h(async (req, res) => {
+  app.get('/account/google/start', limit(cfg.loginRateLimit && cfg.loginRateLimit * 3, 'start'), h(async (req, res) => {
     if (!cfg.google) throw new HttpError(409, 'a entrada com Google não está disponível');
     const state = randomBytes(24).toString('base64url'), verifier = randomBytes(32).toString('base64url');
     const challenge = createHash('sha256').update(verifier).digest('base64url');
@@ -574,14 +574,14 @@ export function createApp(db: Db, cfg: AppConfig) {
     return undefined;
   }));
   /** A app instalada pergunta se a entrada com Google já terminou (uso único: a sessão é entregue uma só vez). */
-  app.get('/account/google/poll', limit(cfg.loginRateLimit ? cfg.loginRateLimit * 12 : undefined), h(async (req) => {
+  app.get('/account/google/poll', limit(cfg.loginRateLimit ? cfg.loginRateLimit * 12 : undefined, 'poll'), h(async (req) => {
     const rid = typeof req.query.rid === 'string' && /^[\w-]{32,64}$/.test(req.query.rid) ? req.query.rid : '';
     if (!rid) throw new HttpError(400, 'pedido inválido');
     const r = (await db.query<any>(`DELETE FROM login_handoffs WHERE rid_hash=$1 AND expires_at>now() RETURNING sealed`, [hashToken(rid)])).rows[0];
     await db.query(`DELETE FROM login_handoffs WHERE expires_at<now()`);
     return r ? { done: true, token: openSecret(r.sealed, cfg.tokenSecret) } : { done: false };
   }));
-  app.get('/account/google/callback', limit(cfg.loginRateLimit), h(async (req, res) => {
+  app.get('/account/google/callback', limit(cfg.loginRateLimit && cfg.loginRateLimit * 3, 'callback'), h(async (req, res) => {
     const fail = (why: string) => { res.redirect(302, '/account?error=' + encodeURIComponent(why)); return undefined; };
     if (!cfg.google) return fail('google_off');
     const state = String(req.query.state ?? ''), code = String(req.query.code ?? '');
@@ -664,7 +664,7 @@ export function createApp(db: Db, cfg: AppConfig) {
   // ---------- entrada por telemóvel (código por SMS) ----------
   const codeHash = (phone: string, code: string) => createHmac('sha256', cfg.tokenSecret).update(`phone:${phone}:${code}`).digest('hex');
   /** Pede o código. A resposta é sempre a mesma (não revela se o número já tem conta). */
-  app.post('/account/phone/start', limit(cfg.loginRateLimit), h(async (req) => {
+  app.post('/account/phone/start', limit(cfg.loginRateLimit, 'pstart'), h(async (req) => {
     if (!cfg.sms) throw new HttpError(409, 'a entrada por telemóvel não está disponível');
     const phone = normalizePhone(String(req.body?.phone ?? ''));
     if (!phone) throw new HttpError(400, 'número de telemóvel inválido (por exemplo 84 123 4567)');
@@ -679,7 +679,7 @@ export function createApp(db: Db, cfg: AppConfig) {
     return { sent: true };
   }));
   /** Confirma o código: entra na conta do número ou cria uma (o nome é pedido só na primeira vez). */
-  app.post('/account/phone/verify', limit(cfg.loginRateLimit), h(async (req) => {
+  app.post('/account/phone/verify', limit(cfg.loginRateLimit, 'pverify'), h(async (req) => {
     if (!cfg.sms) throw new HttpError(409, 'a entrada por telemóvel não está disponível');
     const phone = normalizePhone(String(req.body?.phone ?? ''));
     const code = String(req.body?.code ?? '').replace(/\D/g, '');
