@@ -381,7 +381,8 @@ body:has(.shell) { background: #f4f2ee; }
 .app-tabs a { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 4px; color: #c9c6e2; text-decoration: none; font: 700 .68rem var(--font-body); letter-spacing: .02em; min-height: 48px; justify-content: center; min-width: 0; }
 .app-tabs a span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .app-tabs a svg { width: 22px; height: 22px; }
 .app-tabs a.on { color: #5ce1ff; } .app-tabs a.on svg { filter: drop-shadow(0 0 6px rgb(92 225 255 / .45)); }
-.map-page.with-tabs { bottom: calc(var(--tabs-h) + env(safe-area-inset-bottom)); }
+.map-page.with-tabs { bottom: 0; } /* o mapa vai até ao fundo, por trás da barra; a lista reserva o espaço da barra */
+@media (max-width: 899px) { .map-page.with-tabs .map-sheet { padding-bottom: calc(var(--tabs-h) + env(safe-area-inset-bottom)); } .map-page.with-tabs .map-sheet.peek { height: calc(150px + var(--tabs-h) + env(safe-area-inset-bottom)); } .map-page.with-tabs .map-sheet.half { height: calc(46vh + var(--tabs-h) + env(safe-area-inset-bottom)); } }
 @media (min-width: 900px) { .app-tabs { left: 50%; right: auto; transform: translateX(-50%); width: min(460px, 100%); bottom: 16px; border-radius: 18px; border: 1px solid rgb(255 255 255 / .12); padding-bottom: 6px; } .map-page.with-tabs { bottom: 0; } }
 @media (display-mode: standalone) {
   html, body { overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; }
