@@ -4,6 +4,7 @@ import { inApp } from '../i18n';
 import { NewsletterAdmin } from './Newsletter';
 import { Empty, Field, Icon, Layout, Modal, PageHead, Pill, Skeleton, useAction, useToast } from '../ui';
 
+const ROLE_LABEL: Record<string, string> = { ORG_ADMIN: 'Administrador da empresa', CASHIER: 'Balcão / caixa', MERCHANT_OPERATOR: 'Operador de comerciante', GATE_OPERATOR: 'Controlo de acessos', PLATFORM_ADMIN: 'Administrador Bilhete+' };
 const FILTERS = [['PENDING', 'Pendentes'], ['ACTIVE', 'Activas'], ['all', 'Todas']] as const;
 
 /** Administração Bilhete+: revisão e aprovação das empresas registadas online. */
@@ -145,7 +146,7 @@ function Review({ id, onClose, toast }: { id: string; onClose: () => void; toast
           {o.documents.length === 0 ? <p className="muted small">Sem documentos anexados.</p> : o.documents.map((d: any) => (
             <div className="between" key={d.id}><span>{d.label}<br /><small className="muted">{d.filename}</small></span><button className="ghost sm" onClick={() => download(d)}><Icon n="arrowdown" />Descarregar</button></div>))}</div>
         <div><h3>Equipa ({o.users.length})</h3>
-          {o.users.map((u: any) => <div className="between small" key={u.id}><span>{u.name} · <span className="muted">{u.email}</span></span><span className="muted">{u.role}</span></div>)}</div>
+          {o.users.map((u: any) => <div className="between small" key={u.id}><span>{u.name} · <span className="muted">{u.email}</span></span><span className="muted">{ROLE_LABEL[u.role] ?? u.role}</span></div>)}</div>
         <div><h3>Eventos ({o.events.length})</h3>
           {o.events.length === 0 ? <p className="muted small">Ainda sem eventos.</p> : o.events.map((e: any) => <div className="between small" key={e.id}><span>{e.name}</span><span className="muted">{e.sold} bilhetes · <Pill s={e.status} /></span></div>)}</div>
         <p className="muted small">Área de entrada da equipa: <span className="mono">/company/{o.slug}</span></p>

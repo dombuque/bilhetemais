@@ -122,6 +122,29 @@ function NewEvent({ events, toast, onClose, onCreated }: { events: any[]; toast:
 
 const TABS = ['Resumo', 'Bilhetes', 'Comerciantes', 'Portas', 'Acertos', 'Reembolsos', 'Conteúdo', 'Parâmetros', 'Aparência'] as const;
 
+/** Eliminar o evento, sem janelas: abre-se aqui mesmo, pede o motivo (fica na auditoria) e só funciona sem vendas nem movimentos. */
+function DeleteEvent({ id, name, sold, onDone, toast }: { id: string; name: string; sold: number; onDone: () => void; toast: (m: string, e?: boolean) => void }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [typed, setTyped] = useState('');
+  const { busy, run } = useAction(toast);
+  return (
+    <div className="card stack" style={{ marginTop: 18 }}>
+      <div className="between"><div><b>Eliminar evento</b><p className="muted small" style={{ margin: '4px 0 0' }}>O evento deixa de aparecer e o endereço curto fica livre. Só é possível sem vendas nem movimentos; a acção fica registada na auditoria.</p></div>
+        {!open && <button className="ghost danger" onClick={() => setOpen(true)}><Icon n="trash" />Eliminar…</button>}</div>
+      {open && <>
+        {sold > 0 && <p className="small" style={{ color: 'var(--bad)', margin: 0 }}>Este evento tem bilhetes vendidos: não pode ser eliminado.</p>}
+        <Field label="Motivo (fica na auditoria)"><input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ex.: evento criado por engano" /></Field>
+        <Field label={`Escreva o nome do evento para confirmar: ${name}`}><input value={typed} onChange={(e) => setTyped(e.target.value)} /></Field>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="danger" disabled={busy || reason.trim().length < 3 || typed.trim() !== name.trim()} onClick={() => run(async () => { await api('POST', `/events/${id}/delete`, { reason }); onDone(); }, 'Evento eliminado')}>Eliminar definitivamente</button>
+          <button className="ghost" disabled={busy} onClick={() => { setOpen(false); setReason(''); setTyped(''); }}>Cancelar</button>
+        </div>
+      </>}
+    </div>
+  );
+}
+
 function EventAdmin({ id, back, toast, onOpen }: { id: string; back: () => void; toast: Toast; onOpen: (id: string) => void }) {
   const [tab, setTab] = useState<(typeof TABS)[number]>('Resumo');
   const [ov, setOv] = useState<any>(null);
@@ -149,7 +172,7 @@ function EventAdmin({ id, back, toast, onOpen }: { id: string; back: () => void;
         </>} />
       <div className="seg scroll" role="tablist" style={{ marginBottom: 18 }}>{TABS.map((t) => <button key={t} role="tab" aria-selected={t === tab} className={t === tab ? 'on' : ''} onClick={() => setTab(t)}>{t}</button>)}</div>
 
-      {tab === 'Resumo' && <Summary ov={ov} rep={rep} url={url} alerts={alerts} />}
+      {tab === 'Resumo' && <><Summary ov={ov} rep={rep} url={url} alerts={alerts} /><DeleteEvent id={id} name={ev.name} sold={Number(rep?.sold ?? 0)} onDone={back} toast={toast} /></>}
       {tab === 'Bilhetes' && <div className="stack"><Tickets ov={ov} id={id} act={act} busy={busy} /><TicketControl id={id} toast={toast} /></div>}
       {tab === 'Comerciantes' && <Merchants ov={ov} id={id} act={act} busy={busy} />}
       {tab === 'Portas' && <div className="card stack">

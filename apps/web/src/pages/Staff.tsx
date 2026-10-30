@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { api, getToken, setToken } from '../api';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { api, dt, getToken, setToken, upload } from '../api';
 import { Field, Icon, LangSwitch, Layout, PageHead, Skeleton, useAction, useToast } from '../ui';
 import { themeStyle, type Theme } from '../theme';
 import { Cashier } from './Cashier';
@@ -8,6 +8,7 @@ import { Gate } from './Gate';
 import { OrgAdmin } from './OrgAdmin';
 import { Platform } from './Platform';
 import { Pos } from './Pos';
+import './participant.css';
 
 interface OrgArea { name: string; slug: string; theme: Theme; logo: number | null }
 
@@ -57,9 +58,63 @@ function Login({ onDone, org, slug, canRegister, area }: { onDone: () => void; o
 }
 
 /** Empresa registada mas ainda não aprovada (ou suspensa): só perfil, documentos e marca. */
-/** Empresa ainda sem aprovação (ou suspensa): a área não abre, só este aviso. */
+const REQUIRED_DOCS = ['Certidão de NUIT', 'Alvará / certidão comercial', 'Documento do responsável'];
+
+/** O percurso da empresa registada: pré-registo, documentos, análise e aprovação. */
+function Journey({ docs, submitted }: { docs: number; submitted: boolean }) {
+  const steps: [string, string, 'done' | 'now' | 'todo'][] = [
+    ['Pré-registo', 'Dados da empresa recebidos.', 'done'],
+    ['Documentos', docs === 0 ? 'Anexe os documentos pedidos abaixo.' : submitted ? 'Documentos enviados.' : 'Falta enviá-los para análise.', submitted ? 'done' : 'now'],
+    ['Análise', submitted ? 'A equipa Bilhete+ está a analisar.' : 'Começa quando enviar os documentos.', submitted ? 'now' : 'todo'],
+    ['Aprovação', 'Recebe um e-mail e a área abre-se: já pode criar eventos.', 'todo'],
+  ];
+  return (
+    <ol className="pp-journey" aria-label="Percurso da empresa">
+      {steps.map(([t, d, st], i) => <li key={t} className={st}><span className="n">{st === 'done' ? '✓' : i + 1}</span><span><b>{t}</b><small>{d}</small></span></li>)}
+    </ol>
+  );
+}
+
+/** Documentos que a empresa submete para a aprovação (cada um com o seu espaço) e envio para análise. */
+function DocsPanel({ p, reload, toast }: { p: any; reload: () => Promise<void>; toast: (m: string, e?: boolean) => void }) {
+  const { busy, run } = useAction(toast);
+  const file = useRef<HTMLInputElement>(null);
+  const slot = useRef('');
+  const docs: any[] = p.documents;
+  const sent = !!p.docs_submitted_at;
+  const pick = (label: string) => { slot.current = label; file.current?.click(); };
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]; e.target.value = '';
+    if (!f) return;
+    await run(async () => { await upload('POST', '/org/documents', f, { 'x-doc-label': slot.current, 'x-filename': f.name }); await reload(); }, 'Documento anexado');
+  };
+  const labels = [...REQUIRED_DOCS, ...docs.map((d) => d.label).filter((l: string) => !REQUIRED_DOCS.includes(l))];
+  return (
+    <section className="pp-card pp-wide">
+      <h2 className="pp-h">Documentos</h2>
+      <p className="pp-sub">Para aprovarmos a empresa, anexe os documentos abaixo (PDF, PNG ou JPEG, até 3 MB cada) e envie-os para análise.</p>
+      <input ref={file} type="file" hidden accept="application/pdf,image/png,image/jpeg" onChange={onFile} />
+      <div className="pp-list">{labels.map((l) => {
+        const mine = docs.filter((d) => d.label === l);
+        return (
+          <div key={l} className="pp-row-item"><div className="pp-row-head static">
+            <span className="pp-row-tx"><b>{l}</b><small>{mine.length ? mine.map((d) => `${d.filename} · ${dt(d.created_at)}`).join(' · ') : 'Por anexar'}</small></span>
+            {mine.map((d) => <button key={d.id} type="button" className="pp-link" disabled={busy} onClick={() => run(async () => { await api('DELETE', `/org/documents/${d.id}`); await reload(); }, 'Documento removido')}>Remover</button>)}
+            <button type="button" className="pp-link" disabled={busy} onClick={() => pick(l)}>{mine.length ? 'Substituir' : 'Anexar'}</button>
+          </div></div>);
+      })}</div>
+      <button type="button" className="pp-btn" disabled={busy || docs.length === 0 || sent} onClick={() => run(async () => { await api('POST', '/org/documents/submit', {}); await reload(); }, 'Documentos enviados para análise')}>{sent ? 'Enviado para análise' : 'Enviar para análise'}</button>
+    </section>
+  );
+}
+
+/** Empresa ainda sem aprovação (ou suspensa): a área não abre; mostra o percurso e pede os documentos. */
 function NotApproved({ status, name, onExit }: { status: string; name?: string; onExit: () => void }) {
   const pending = status === 'PENDING';
+  const toast = useToast();
+  const [p, setP] = useState<any>(null);
+  const reload = useCallback(async () => { setP(await api('GET', '/org/profile')); }, []);
+  useEffect(() => { if (pending) reload().catch(() => {}); }, [pending, reload]);
   return (
     <div className="pp">
       <header className="pp-top"><img src="/logo-dark.svg" alt="Bilhete+" /><span className="pp-top-r"><LangSwitch className="on-dark" /></span></header>
@@ -67,11 +122,14 @@ function NotApproved({ status, name, onExit }: { status: string; name?: string; 
       <main className="pp-main">
         <section className="pp-card pp-wide">
           <p className="pp-sub">{pending
-            ? `${name ? name + ' ainda' : 'A sua empresa ainda'} está a aguardar a aprovação da equipa Bilhete+. Quando for aprovada, avisamos por e-mail e esta área abre-se.`
+            ? `${name ? name + ' ainda' : 'A sua empresa ainda'} não está aprovada. Siga o percurso abaixo; quando a equipa Bilhete+ aprovar, avisamos por e-mail e esta área abre-se.`
             : `${name ? name + ' está' : 'A sua empresa está'} sem acesso neste momento. Contacte o suporte Bilhete+.`}</p>
+          {pending && p && <Journey docs={p.documents.length} submitted={!!p.docs_submitted_at} />}
           <button type="button" className="pp-btn alt" onClick={onExit}>Terminar sessão</button>
         </section>
+        {pending && p && <DocsPanel p={p} reload={reload} toast={toast.show} />}
       </main>
+      {toast.node}
     </div>
   );
 }

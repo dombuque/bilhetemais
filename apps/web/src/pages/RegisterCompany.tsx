@@ -32,10 +32,11 @@ export function Register() {
   if (done !== null) return (
     <Shell label="[BP/ Registo recebido]" title="Falta pouco.">
       <section className="pp-card">
-        <p className="pp-sub">A sua empresa está <b>a aguardar aprovação</b>. Só depois de aprovada poderá usar a área da empresa e criar eventos: até lá, ao entrar, verá «Empresa não aprovada».</p>
-        <p className="pp-sub">Este é o endereço da área da sua empresa. <b>Guarde-o</b>: não é divulgado em lado nenhum. Enviámos também por e-mail.</p>
+        <p className="pp-sub">Pré-registo feito. A sua empresa está <b>a aguardar aprovação</b>; este é o percurso:</p>
+        <ol className="pp-journey"><li className="done"><span className="n">✓</span><span><b>Pré-registo</b><small>Dados da empresa recebidos.</small></span></li><li className="now"><span className="n">2</span><span><b>Documentos</b><small>Entre na área da empresa e envie os documentos pedidos.</small></span></li><li className="todo"><span className="n">3</span><span><b>Análise</b><small>A equipa Bilhete+ analisa.</small></span></li><li className="todo"><span className="n">4</span><span><b>Aprovação</b><small>Recebe um e-mail e já pode criar eventos.</small></span></li></ol>
+        <p className="pp-sub">Este é o endereço da área da sua empresa. <b>Guarde-o</b>; enviámos também por e-mail.</p>
         <p className="mono" style={{ overflowWrap: 'anywhere' }} data-no-translate>{location.origin}/company/{done}</p>
-        <a className="pp-btn" href={`/company/${done}`}>Ir para a minha empresa</a>
+        <a className="pp-btn" href={`/company/${done}`}>Entrar e enviar documentos</a>
       </section>
     </Shell>
   );

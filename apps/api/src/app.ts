@@ -163,7 +163,7 @@ export function createApp(db: Db, cfg: AppConfig) {
   const eventFor = async (user: User, eventId: string, tx: Tx = db) => {
     const r = await tx.query<any>('SELECT * FROM events WHERE id=$1', [eventId]);
     const ev = r.rows[0];
-    if (!ev || (user.role !== 'PLATFORM_ADMIN' && ev.organization_id !== user.organization_id)) throw new HttpError(404, 'evento não encontrado');
+    if (!ev || ev.deleted_at || (user.role !== 'PLATFORM_ADMIN' && ev.organization_id !== user.organization_id)) throw new HttpError(404, 'evento não encontrado');
     return ev;
   };
 
@@ -1206,7 +1206,7 @@ Bilhete+` });
         (SELECT COALESCE(sum(po.total_minor),0)::text FROM ticket_orders po WHERE po.event_id=e.id AND po.status='PAID') AS revenue_minor,
         (SELECT count(*)::int FROM tickets t WHERE t.event_id=e.id AND t.status IN ('ISSUED','USED')) AS sold,
         (SELECT COALESCE(sum(quantity),0)::int FROM ticket_types q WHERE q.event_id=e.id) AS capacity
-        FROM events e JOIN organizations o ON o.id=e.organization_id LEFT JOIN event_domains d ON d.event_id=e.id ORDER BY e.starts_at DESC LIMIT 500`)).rows));
+        FROM events e JOIN organizations o ON o.id=e.organization_id LEFT JOIN event_domains d ON d.event_id=e.id WHERE e.deleted_at IS NULL ORDER BY e.starts_at DESC LIMIT 500`)).rows));
   /** Quanto o evento já rendeu: bilhetes pagos, consumos com a carteira e carregamentos. */
   app.get('/platform/events/:id/summary', ...staff('PLATFORM_ADMIN'), h(async (req) => {
     if (!/^[0-9a-f-]{36}$/.test(req.params.id)) throw new HttpError(404, 'evento não encontrado');
@@ -1232,7 +1232,23 @@ Bilhete+` });
         (SELECT count(*)::int FROM tickets t WHERE t.event_id=e.id AND t.status IN ('ISSUED','USED')) AS sold,
         (SELECT COALESCE(sum(quantity),0)::int FROM ticket_types q WHERE q.event_id=e.id) AS capacity
         FROM events e LEFT JOIN event_domains d ON d.event_id=e.id
-        WHERE e.organization_id=$1 ORDER BY e.starts_at DESC`, [req.user!.organization_id])).rows));
+        WHERE e.organization_id=$1 AND e.deleted_at IS NULL ORDER BY e.starts_at DESC`, [req.user!.organization_id])).rows));
+  /** Eliminar evento: só sem vendas nem movimentos. Fica escondido e arquivado (quem, quando, porquê) e o endereço curto volta a ficar livre. */
+  app.post('/events/:id/delete', ...staff('ORG_ADMIN'), h(async (req) => {
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 300) : '';
+    if (reason.length < 3) throw new HttpError(400, 'indique o motivo');
+    return db.transaction(async (tx) => {
+      const ev = await eventFor(req.user!, req.params.id, tx);
+      const paid = (await tx.query<any>(`SELECT count(*)::int AS n FROM ticket_orders WHERE event_id=$1 AND status='PAID'`, [ev.id])).rows[0].n;
+      const mov = (await tx.query<any>(`SELECT count(*)::int AS n FROM wallet_ledger_entries l JOIN wallets w ON w.id=l.wallet_id WHERE w.event_id=$1`, [ev.id])).rows[0].n;
+      if (paid > 0 || mov > 0) throw new HttpError(409, 'este evento já tem vendas ou movimentos: não pode ser eliminado. Cancele o evento em vez disso');
+      await tx.query(`UPDATE events SET deleted_at=now(), deleted_by=$2, delete_reason=$3, status='CANCELLED' WHERE id=$1`, [ev.id, req.user!.id, reason]);
+      await tx.query(`UPDATE ticket_orders SET status='CANCELLED' WHERE event_id=$1 AND status='PENDING_PAYMENT'`, [ev.id]);
+      await tx.query('DELETE FROM event_domains WHERE event_id=$1', [ev.id]);
+      await audit(tx, req.user, 'event.delete', 'event', ev.id, { name: ev.name, organizationId: ev.organization_id, reason });
+      return { ok: true };
+    });
+  }));
   app.get('/events/:id/overview', ...staff('ORG_ADMIN'), h(async (req) => {
     const ev = await eventFor(req.user!, req.params.id);
     const q = async (sql: string) => (await db.query<any>(sql, [ev.id])).rows;
@@ -1418,7 +1434,7 @@ Bilhete+` });
   }));
 
   const orgProfile = async (orgId: string) => {
-    const r = await db.query<any>(`SELECT id,slug,legal_name,trade_name,nuit,address,phone,contact_name,billing_email,website,status,status_reason,created_at FROM organizations WHERE id=$1`, [orgId]);
+    const r = await db.query<any>(`SELECT id,slug,legal_name,trade_name,nuit,address,phone,contact_name,billing_email,website,status,status_reason,created_at,docs_submitted_at FROM organizations WHERE id=$1`, [orgId]);
     const d = await db.query<any>('SELECT id,label,filename,content_type,created_at FROM org_documents WHERE organization_id=$1 ORDER BY created_at', [orgId]);
     return { ...r.rows[0], documents: d.rows };
   };
@@ -1447,7 +1463,21 @@ Bilhete+` });
     if (n.rows[0].c >= 10) throw new HttpError(409, 'limite de documentos atingido');
     const r = await db.query<any>('INSERT INTO org_documents(organization_id,label,filename,content_type,data) VALUES($1,$2,$3,$4,$5) RETURNING id',
       [req.user!.organization_id, opt(req.headers['x-doc-label'], 80) ?? 'Documento', (opt(req.headers['x-filename'], 120) ?? 'documento').replace(/[^\w.\- ]/g, '_'), ct, buf]);
+    await db.query('UPDATE organizations SET docs_submitted_at=NULL WHERE id=$1', [req.user!.organization_id]); // documento novo: volta a precisar de envio
     return { id: r.rows[0].id };
+  }));
+  /** A empresa pendente envia os documentos para análise: avisa os e-mails de suporte. */
+  app.post('/org/documents/submit', ...staffAny('ORG_ADMIN'), h(async (req) => {
+    const org = (await db.query<any>('SELECT id,trade_name,nuit,status FROM organizations WHERE id=$1', [req.user!.organization_id])).rows[0];
+    if (!org || !['PENDING', 'REJECTED'].includes(org.status)) throw new HttpError(409, 'a empresa já não está a aguardar aprovação');
+    const docs = (await db.query<any>('SELECT label,filename FROM org_documents WHERE organization_id=$1 ORDER BY created_at', [org.id])).rows;
+    if (docs.length === 0) throw new HttpError(400, 'anexe pelo menos um documento');
+    const to = (await db.query<any>('SELECT email FROM support_emails')).rows;
+    for (const r of to) await queueMail(db, cfg.mailer ?? null, db, { to: r.email, organizationId: org.id, subject: `Documentos para análise: ${org.trade_name} — Bilhete+`,
+      text: `A empresa ${org.trade_name} (NUIT ${org.nuit}) enviou documentos para análise:\n\n${docs.map((d: any) => `• ${d.label} (${d.filename})`).join('\n')}\n\nAnalise e aprove no backoffice: https://platform.${cfg.baseDomain ?? ''}\n\nBilhete+` });
+    await db.query('UPDATE organizations SET docs_submitted_at=now() WHERE id=$1', [org.id]);
+    await audit(db, req.user, 'org.docs_submit', 'organization', org.id, { documents: docs.length });
+    return { ok: true, notified: to.length };
   }));
   app.delete('/org/documents/:id', ...staffAny('ORG_ADMIN'), h(async (req) => {
     await db.query('DELETE FROM org_documents WHERE id=$1 AND organization_id=$2', [req.params.id, req.user!.organization_id]);
@@ -1465,7 +1495,7 @@ Bilhete+` });
     const p = await orgProfile(req.params.id);
     if (!p.id) throw new HttpError(404, 'empresa não encontrada');
     const users = await db.query(`SELECT id,name,email,role,status FROM users WHERE organization_id=$1 ORDER BY created_at`, [req.params.id]);
-    const events = await db.query(`SELECT e.id,e.name,e.status,e.starts_at,(SELECT count(*)::int FROM tickets t WHERE t.event_id=e.id AND t.status IN ('ISSUED','USED')) AS sold FROM events e WHERE e.organization_id=$1 ORDER BY e.starts_at DESC`, [req.params.id]);
+    const events = await db.query(`SELECT e.id,e.name,e.status,e.starts_at,(SELECT count(*)::int FROM tickets t WHERE t.event_id=e.id AND t.status IN ('ISSUED','USED')) AS sold FROM events e WHERE e.organization_id=$1 AND e.deleted_at IS NULL ORDER BY e.starts_at DESC`, [req.params.id]);
     return { ...p, users: users.rows, events: events.rows };
   }));
 
