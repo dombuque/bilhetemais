@@ -25,6 +25,9 @@ export const EN_ADMIN: Record<string, string> = {
   'Este evento pode herdar parâmetros e aparência de outro evento da empresa. O que definir aqui substitui o herdado; o resto acompanha o evento original.': 'This event can inherit settings and appearance from another company event. Whatever you set here overrides the inherited value; the rest follows the original event.',
   'Logótipo': 'Logo', 'Moderna (padrão)': 'Modern (default)', 'Clássica (serifada)': 'Classic (serif)', 'Técnica': 'Technical', 'Gradiente (padrão)': 'Gradient (default)', 'E-mail de facturação': 'Billing email', 'definido': 'set',
   'Ex.: Dois dias de música e cultura': 'E.g. Two days of music and culture', 'Pagamentos': 'Payments', 'Saldo em circulação': 'Balance in circulation',
+  // ---------- lista de bilhetes ----------
+  'Por atender': 'Upcoming', 'Eventos passados': 'Past events', 'Sem eventos por atender.': 'No upcoming events.', 'Ainda sem eventos passados.': 'No past events yet.',
+  'Carregado': 'Topped up', 'Gasto': 'Spent', 'Saldo': 'Balance', 'Compra': 'Purchase', 'Levantamento': 'Cash-out', 'Ajuste': 'Adjustment', 'Bilhete': 'Ticket',
   // ---------- estados ----------
   'Activa': 'Active', 'Publicado': 'Published', 'Pago': 'Paid', 'Confirmado': 'Confirmed', 'Pendente': 'Pending', 'A aguardar pagamento': 'Awaiting payment', 'Utilizado': 'Used', 'Suspensa': 'Suspended', 'Desactivada': 'Disabled', 'Cancelado': 'Cancelled', 'Bloqueado': 'Blocked', 'Encerrado': 'Closed',
   'Titular': 'Holder', 'Estado': 'Status',

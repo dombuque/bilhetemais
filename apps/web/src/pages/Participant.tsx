@@ -139,6 +139,61 @@ function Row({ icon, title, hint, open, onToggle, danger, children }: { icon: st
   );
 }
 
+const MV: Record<string, string> = { TOPUP: 'Carregamento', PAYMENT: 'Compra', REFUND: 'Devolução', CASHOUT: 'Levantamento', ADJUSTMENT: 'Ajuste' };
+const TICKET_STATE: Record<string, string> = { ISSUED: 'Válido', USED: 'Já utilizado', BLOCKED: 'Bloqueado', REVOKED: 'Cancelado', PENDING: 'A aguardar pagamento' };
+
+/** Um bilhete: tipo, estado, saldo da carteira, o que já gastou e o detalhe dos consumos. */
+function TicketCard({ t, n, total }: { t: any; n: number; total: number }) {
+  const bad = t.status === 'BLOCKED' || t.status === 'REVOKED';
+  const spent = BigInt(t.spentMinor ?? 0), topup = BigInt(t.topupMinor ?? 0);
+  return (
+    <div className={'pp-tk' + (bad ? ' bad' : '')}>
+      <div className="pp-tk-head">
+        <b>{t.typeName ?? 'Bilhete'}{total > 1 ? ` · ${n}/${total}` : ''}</b>
+        <span className={'pp-tk-st st-' + t.status}>{TICKET_STATE[t.status] ?? t.status}</span>
+      </div>
+      {bad && t.reason && <p className="pp-tk-reason">Motivo: {t.reason}</p>}
+      {t.hasWallet && !bad && <div className="pp-tk-bal">
+        <div><small>Saldo</small><strong>{mt(t.balanceMinor)}</strong></div>
+        <div><small>Carregado</small><span>{mt(topup)}</span></div>
+        <div><small>Gasto</small><span>{mt(spent)}</span></div>
+      </div>}
+      <a className="pp-btn alt" href={`/t/${t.token}`}><Icon n="ticket" />Abrir bilhete (QR{t.hasWallet ? ' e carteira' : ''})</a>
+      {t.usage?.length > 0 && <details className="pp-tk-use"><summary>Consumos e movimentos ({t.usage.length})</summary>
+        <ul>{t.usage.map((u: any) => {
+          const pos = BigInt(u.amount_minor) > 0n;
+          return <li key={u.id}>
+            <div className="between"><span><b>{u.merchant ?? MV[u.type] ?? u.type}</b><small>{u.merchant ? MV[u.type] + ' · ' : ''}{dt(u.created_at)}</small></span><span className={pos ? 'pos' : 'neg'}>{pos ? '+' : '−'}{mt(pos ? u.amount_minor : -BigInt(u.amount_minor))}</span></div>
+            {Array.isArray(u.items) && u.items.length > 0 && <p className="pp-tk-items">{u.items.map((i: any) => `${i.qty} × ${i.name}`).join(' · ')}</p>}
+          </li>;
+        })}</ul>
+      </details>}
+    </div>
+  );
+}
+
+function OrderGroup({ title, items, empty, past }: { title: string; items: any[]; empty: string; past?: boolean }) {
+  return (
+    <section className={'pp-group' + (past ? ' past' : '')}>
+      <h2 className="pp-group-h">{title}<span>{items.length}</span></h2>
+      {items.length === 0 ? <p className="pp-sub">{empty}</p> : <div className="pp-orders">{items.map((o) => (
+        <article className="pp-ticket" key={o.id}>
+          <div className="pp-ticket-top">
+            <span className="pp-label">{dt(o.starts_at)}</span>
+            <h3>{o.event}</h3>
+            {o.location && <p>{o.location}</p>}
+          </div>
+          <div className="pp-perf" aria-hidden="true" />
+          <div className="pp-ticket-bot">
+            <div className="between"><Pill s={o.status} /><b>{BigInt(o.total_minor) === 0n ? 'Grátis' : mt(o.total_minor)}</b></div>
+            {o.status === 'PENDING_PAYMENT' && !past && <a className="pp-btn" href={`/o/${o.id}`}>Pagar esta encomenda</a>}
+            {o.tickets.map((t: any, i: number) => <TicketCard key={t.id} t={t} n={i + 1} total={o.tickets.length} />)}
+          </div>
+        </article>))}</div>}
+    </section>
+  );
+}
+
 /** «A minha conta»: separador Bilhetes (encomendas) e separador Perfil (dados, segurança, newsletter, idioma, app). */
 export function AccountPage({ view = 'tickets' }: { view?: 'tickets' | 'profile' }) {
   // a entrada com Google devolve a sessão no fragmento (#t=…&next=…): guarda-se e limpa-se o endereço
@@ -178,21 +233,10 @@ export function AccountPage({ view = 'tickets' }: { view?: 'tickets' | 'profile'
       <main className="pp-main">
         {urlError && GOOGLE_ERRORS[urlError] && !me && <p className="pp-alert" role="alert">{GOOGLE_ERRORS[urlError]}</p>}
         {me === undefined ? <Skeleton rows={3} /> : me === null ? <AuthPanel onDone={refresh} next={location.pathname} intro="Entre para ver os seus bilhetes e o seu perfil." /> : <>
-          {view === 'tickets' && (!orders ? <Skeleton rows={3} /> : orders.length === 0 ? <div className="pp-card"><Empty icon="ticket">Ainda não comprou bilhetes. <a href="/events">Ver eventos</a></Empty></div> : (
-            <div className="pp-orders">{orders.map((o) => (
-              <article className="pp-ticket" key={o.id}>
-                <div className="pp-ticket-top">
-                  <span className="pp-label">{dt(o.starts_at)}</span>
-                  <h3>{o.event}</h3>
-                  {o.location && <p>{o.location}</p>}
-                </div>
-                <div className="pp-perf" aria-hidden="true" />
-                <div className="pp-ticket-bot">
-                  <div className="between"><Pill s={o.status} /><b>{BigInt(o.total_minor) === 0n ? 'Grátis' : mt(o.total_minor)}</b></div>
-                  {o.status === 'PENDING_PAYMENT' && <a className="pp-btn" href={`/o/${o.id}`}>Pagar esta encomenda</a>}
-                  {o.tickets.map((t: any, i: number) => <a key={t.id} className="pp-btn alt" href={`/t/${t.token}`}><Icon n="ticket" />Abrir bilhete {i + 1} (QR e carteira)</a>)}
-                </div>
-              </article>))}</div>))}
+          {view === 'tickets' && (!orders ? <Skeleton rows={3} /> : orders.length === 0 ? <div className="pp-card"><Empty icon="ticket">Ainda não comprou bilhetes. <a href="/events">Ver eventos</a></Empty></div> : <>
+            <OrderGroup title="Por atender" empty="Sem eventos por atender." items={orders.filter((o) => !o.past)} />
+            <OrderGroup title="Eventos passados" empty="Ainda sem eventos passados." items={orders.filter((o) => o.past)} past />
+          </>)}
 
           {view === 'profile' && <div className="pp-list">
             <Row icon="users" title="Dados pessoais" hint={me.email ?? me.phone ?? ''} open={open === 'data'} onToggle={() => toggle('data')}>

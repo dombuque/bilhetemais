@@ -761,11 +761,29 @@ export function createApp(db: Db, cfg: AppConfig) {
     return { ok: true };
   }));
   /** "Os meus bilhetes": encomendas da conta, com os links dos bilhetes já emitidos. */
+  /** Encomendas da conta, com o estado do evento (por atender / passado) e, por bilhete: tipo, saldo da carteira, total gasto e consumos (comerciante, itens). */
   app.get('/account/orders', h(async (req) => {
     const a = await needAccount(req as Request);
-    const os = (await db.query<any>(`SELECT o.id,o.status,o.total_minor,o.created_at,e.name AS event,e.starts_at,e.location,d.subdomain
-        FROM ticket_orders o JOIN events e ON e.id=o.event_id LEFT JOIN event_domains d ON d.event_id=e.id WHERE o.account_id=$1 ORDER BY o.created_at DESC LIMIT 100`, [a.id])).rows;
-    for (const o of os) o.tickets = (await orderTickets(db, o.id)).filter((t: any) => t.token).map((t: any) => ({ id: t.id, token: t.token, status: t.status }));
+    const os = (await db.query<any>(`SELECT o.id,o.status,o.total_minor,o.created_at,e.name AS event,e.starts_at,e.ends_at,e.location,d.subdomain,
+          (coalesce(e.ends_at, e.starts_at + interval '12 hours') < now()) AS past
+        FROM ticket_orders o JOIN events e ON e.id=o.event_id LEFT JOIN event_domains d ON d.event_id=e.id WHERE o.account_id=$1 ORDER BY e.starts_at DESC, o.created_at DESC LIMIT 100`, [a.id])).rows;
+    for (const o of os) {
+      const ts = (await orderTickets(db, o.id)).filter((t: any) => t.token);
+      o.tickets = [];
+      for (const t of ts) {
+        const row = (await db.query<any>(`SELECT t.wallet_id,t.status_reason,tt.name AS type_name,tt.kind FROM tickets t LEFT JOIN ticket_types tt ON tt.id=t.ticket_type_id WHERE t.id=$1`, [t.id])).rows[0] ?? {};
+        let balanceMinor: string | null = null, spentMinor = '0', topupMinor = '0', usage: any[] = [];
+        if (row.wallet_id) {
+          balanceMinor = (await wallet.balanceOf(row.wallet_id)).toString();
+          const sums = (await db.query<any>(`SELECT coalesce(sum(-amount_minor) FILTER (WHERE type='PAYMENT'),0) AS spent, coalesce(sum(amount_minor) FILTER (WHERE type='REFUND'),0) AS refunded, coalesce(sum(amount_minor) FILTER (WHERE type='TOPUP'),0) AS topup FROM wallet_ledger_entries WHERE wallet_id=$1`, [row.wallet_id])).rows[0];
+          spentMinor = (BigInt(sums.spent) - BigInt(sums.refunded)).toString(); topupMinor = String(sums.topup);
+          usage = (await db.query<any>(`SELECT l.id,l.type,l.amount_minor,l.created_at,m.name AS merchant,ms.items
+              FROM wallet_ledger_entries l LEFT JOIN merchants m ON m.id=l.merchant_id LEFT JOIN merchant_sales ms ON ms.ledger_entry_id=l.id
+             WHERE l.wallet_id=$1 ORDER BY l.created_at DESC,l.id LIMIT 30`, [row.wallet_id])).rows;
+        }
+        o.tickets.push({ id: t.id, token: t.token, status: t.status, shortCode: t.shortCode, typeName: row.type_name ?? null, reason: t.status === 'BLOCKED' || t.status === 'REVOKED' ? row.status_reason ?? null : null, hasWallet: !!row.wallet_id, balanceMinor, spentMinor, topupMinor, usage });
+      }
+    }
     return os;
   }));
 
