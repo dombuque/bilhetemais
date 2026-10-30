@@ -336,10 +336,16 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     await webhook({ id: 'evt-child-1', type: 'payment.succeeded', kind: 'ORDER', ref: ord.body.orderId });
     const tok = (await call('GET', `/public/orders/${ord.body.orderId}`)).body.tickets[0].token;
     expect((await call('POST', `/public/tickets/${tok}/topup`, { provider: 'simulator', amountMinor: 5000 })).status).toBe(409); // carteira desactivada
-    // reentrada herdada do pai: a segunda leitura continua válida
-    const scan = () => call('POST', `/events/${S.child}/scan`, { token: tok }, S.gate);
+    // reentrada herdada do pai: depois de sair, volta a entrar (entrada → saída → entrada); sem saída não há segunda entrada
+    const scan = (direction: 'IN' | 'OUT' = 'IN') => call('POST', `/events/${S.child}/scan`, { token: tok, direction }, S.gate);
+    expect((await scan('OUT')).body.result).toBe('NOT_INSIDE'); // saída sem entrada: recusada
     expect((await scan()).body.result).toBe('VALID');
-    expect((await scan()).body.result).toBe('VALID');
+    expect((await scan()).body.result).toBe('ALREADY_INSIDE'); // entrada com o bilhete já dentro: recusada
+    expect((await scan('OUT')).body.result).toBe('EXIT_OK');
+    expect((await scan('OUT')).body.result).toBe('NOT_INSIDE'); // já saiu
+    expect((await scan()).body.result).toBe('VALID'); // reentrada
+    const gs = (await call('GET', `/events/${S.child}/gate-stats`, undefined, S.gate)).body;
+    expect(gs.inside).toBe(1); // lotação: quem está dentro agora
     // herança: sem ciclos, sem auto-herança, só da própria empresa
     expect((await call('PUT', `/events/${S.event}/parent`, { parentId: S.child }, S.adminA)).status).toBe(400);
     expect((await call('PUT', `/events/${S.child}/parent`, { parentId: S.child }, S.adminA)).status).toBe(400);

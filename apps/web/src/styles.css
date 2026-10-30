@@ -469,3 +469,8 @@ body:has(.pub-back) .pub-bar { padding-left: 20px; }
 
 /* eventos de empresas suspensas no backoffice: visíveis, mas desabilitados */
 .evcard.off { filter: grayscale(1); opacity: .6; } .evcard.off .pillbox .pill { background: #3b3a48; color: #fff; }
+
+/* portaria: sentido da leitura e resultados de saída */
+.fullresult.EXIT_OK { background: radial-gradient(circle at 50% 30%, #2f7bff, #1b3f9e); } .fullresult.ALREADY_INSIDE, .fullresult.NOT_INSIDE { background: radial-gradient(circle at 50% 30%, #f0a020, #a35f00); }
+.dirseg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .dirseg button { min-height: 56px; font-size: 1.1rem; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.dirseg button.on { background: #12b36a; color: #fff; border-color: #12b36a; } .dirseg button.on.out { background: #2f7bff; border-color: #2f7bff; }

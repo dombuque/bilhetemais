@@ -583,9 +583,25 @@ Bilhete+` });
   const findTicket = async (tx: Tx, eventId: string, input: string) => {
     const sc = shortCodeOf(input);
     const r = sc
-      ? await tx.query<any>('SELECT id,status FROM tickets WHERE event_id=$1 AND short_code=$2', [eventId, sc])
-      : await tx.query<any>('SELECT id,status FROM tickets WHERE token_hash=$1 AND event_id=$2', [hashToken(input), eventId]);
-    return r.rows[0] as { id: string; status: string } | undefined;
+      ? await tx.query<any>('SELECT id,status,inside FROM tickets WHERE event_id=$1 AND short_code=$2', [eventId, sc])
+      : await tx.query<any>('SELECT id,status,inside FROM tickets WHERE token_hash=$1 AND event_id=$2', [hashToken(input), eventId]);
+    return r.rows[0] as { id: string; status: string; inside: boolean } | undefined;
+  };
+  /** Regra de entrada/saída: IN só se não está dentro (e, sem reentrada, só uma vez); OUT só se está dentro. Devolve o resultado e actualiza o bilhete. */
+  const applyScan = async (tx: Tx, ev: any, st: { reentryAllowed: boolean }, t: { id: string; status: string; inside: boolean } | undefined, dir: 'IN' | 'OUT', when: Date) => {
+    if (!t || t.status === 'PENDING') return 'UNAUTHORIZED';
+    if (dir === 'OUT') {
+      if (!t.inside) return 'NOT_INSIDE'; // sem entrada registada (ou já saiu)
+      await tx.query(`UPDATE tickets SET inside=false WHERE id=$1`, [t.id]); // sai-se sempre, mesmo com o bilhete entretanto bloqueado
+      return 'EXIT_OK';
+    }
+    if (t.status === 'REVOKED') return 'REVOKED';
+    if (t.status === 'BLOCKED') return 'BLOCKED';
+    if (new Date(ev.ends_at) < when) return 'EXPIRED';
+    if (t.status === 'USED' && !st.reentryAllowed) return 'ALREADY_USED'; // entrada única: o bilhete já foi usado
+    if (t.inside) return 'ALREADY_INSIDE'; // com reentrada: já está dentro, falta ler a saída
+    await tx.query(`UPDATE tickets SET status='USED', inside=true, used_at=COALESCE(used_at,$2) WHERE id=$1`, [t.id, when]);
+    return 'VALID';
   };
   const orderTickets = async (tx: Tx, orderId: string) => {
     const r = await tx.query<any>(`SELECT id,format,status,ticket_type_id,short_code AS "shortCode",token_version AS ver FROM tickets WHERE order_id=$1 ORDER BY created_at,id`, [orderId]);
@@ -1209,19 +1225,11 @@ Bilhete+` });
     const input = str(req.body.token, 'token').trim();
     return db.transaction(async (tx) => {
       const st = (await settingsOf(tx, ev)).effective;
-      let result: string, ticketId: string | null = null;
+      const dir: 'IN' | 'OUT' = req.body.direction === 'OUT' ? 'OUT' : 'IN';
       const tk = await findTicket(tx, ev.id, input);
-      const t = { rows: tk ? [tk] : [] as { id: string; status: string }[] };
-      if (t.rows[0]) ticketId = t.rows[0].id;
-      if (!t.rows[0] || t.rows[0].status === 'PENDING') result = 'UNAUTHORIZED';
-      else if (t.rows[0].status === 'REVOKED') result = 'REVOKED';
-      else if (t.rows[0].status === 'BLOCKED') result = 'BLOCKED';
-      else if (new Date(ev.ends_at) < new Date()) result = 'EXPIRED';
-      else {
-        const u = await tx.query(`UPDATE tickets SET status='USED',used_at=now() WHERE id=$1 AND status='ISSUED' RETURNING id`, [ticketId]);
-        result = u.rows.length || st.reentryAllowed ? 'VALID' : 'ALREADY_USED';
-      }
-      await tx.query('INSERT INTO entry_scans(event_id,gate_id,ticket_id,operator_id,result) VALUES($1,$2,$3,$4,$5)', [ev.id, req.body.gateId ?? null, ticketId, req.user!.id, result]);
+      const ticketId: string | null = tk?.id ?? null;
+      const result = await applyScan(tx, ev, st, tk, dir, new Date());
+      await tx.query('INSERT INTO entry_scans(event_id,gate_id,ticket_id,operator_id,result,direction) VALUES($1,$2,$3,$4,$5,$6)', [ev.id, req.body.gateId ?? null, ticketId, req.user!.id, result, dir]);
       // dados para a pessoa da portaria confirmar quem entra (o QR só leva um código opaco)
       let ticket: { type: string; holder: string; usedAt: string | null; firstGate: string | null; reason: string | null } | null = null;
       if (ticketId) {
@@ -1469,9 +1477,10 @@ Bilhete+` });
   }));
   app.get('/events/:id/gate-stats', ...staff('GATE_OPERATOR', 'ORG_ADMIN'), h(async (req) => {
     const ev = await eventFor(req.user!, req.params.id);
-    const t = await db.query<any>(`SELECT count(*) FILTER (WHERE status IN ('ISSUED','USED'))::int AS issued, count(*) FILTER (WHERE status='USED')::int AS entered FROM tickets WHERE event_id=$1`, [ev.id]);
-    const recent = await db.query<any>(`SELECT result,created_at FROM entry_scans WHERE event_id=$1 ORDER BY created_at DESC LIMIT 10`, [ev.id]);
-    return { ...t.rows[0], recent: recent.rows };
+    const t = await db.query<any>(`SELECT count(*) FILTER (WHERE status IN ('ISSUED','USED'))::int AS issued, count(*) FILTER (WHERE status='USED')::int AS entered, count(*) FILTER (WHERE inside)::int AS inside FROM tickets WHERE event_id=$1`, [ev.id]);
+    const capacity = (await db.query<any>(`SELECT COALESCE(sum(quantity),0)::int AS c FROM ticket_types WHERE event_id=$1`, [ev.id])).rows[0].c;
+    const recent = await db.query<any>(`SELECT result,direction,created_at FROM entry_scans WHERE event_id=$1 ORDER BY created_at DESC LIMIT 10`, [ev.id]);
+    return { ...t.rows[0], capacity, recent: recent.rows };
   }));
   app.get('/pos/sales', ...staff('MERCHANT_OPERATOR'), h(async (req) =>
     (await db.query(`SELECT id,total_minor,created_at,items FROM merchant_sales WHERE merchant_id=$1 ORDER BY created_at DESC LIMIT 20`, [req.user!.merchant_id])).rows));
@@ -2005,9 +2014,9 @@ Bilhete+` });
   app.get('/events/:id/gate-manifest', ...staff('GATE_OPERATOR'), h(async (req) => {
     const ev = await eventFor(req.user!, req.params.id);
     const st = (await settingsOf(db, ev)).effective;
-    const t = await db.query<any>(`SELECT token_hash AS h,status AS s,short_code FROM tickets WHERE event_id=$1 AND status IN ('ISSUED','USED','REVOKED','BLOCKED')`, [ev.id]);
+    const t = await db.query<any>(`SELECT token_hash AS h,status AS s,short_code,inside FROM tickets WHERE event_id=$1 AND status IN ('ISSUED','USED','REVOKED','BLOCKED')`, [ev.id]);
     // o código curto vai em hash (k), tal como o código completo: a lista guardada no telemóvel não revela nenhum código
-    return { generatedAt: new Date().toISOString(), endsAt: ev.ends_at, reentryAllowed: st.reentryAllowed, tickets: t.rows.map((r: any) => ({ h: r.h, s: r.s, k: r.short_code ? createHash('sha256').update(r.short_code).digest('hex') : undefined })) };
+    return { generatedAt: new Date().toISOString(), endsAt: ev.ends_at, reentryAllowed: st.reentryAllowed, tickets: t.rows.map((r: any) => ({ h: r.h, s: r.s, i: r.inside, k: r.short_code ? createHash('sha256').update(r.short_code).digest('hex') : undefined })) };
   }));
   /** Sincroniza leituras feitas offline. Idempotente por clientId; conflitos (já usado noutra porta) ficam sinalizados. */
   app.post('/events/:id/scan-batch', ...staff('GATE_OPERATOR'), h(async (req) => {
@@ -2022,18 +2031,11 @@ Bilhete+` });
         const dup = await tx.query<any>('SELECT result FROM entry_scans WHERE event_id=$1 AND client_id=$2', [ev.id, clientId]);
         if (dup.rows[0]) return { clientId, result: dup.rows[0].result, conflict: false };
         const t = await findTicket(tx, ev.id, str(sc.token, 'token').trim());
-        let result: string;
-        if (!t || t.status === 'PENDING') result = 'UNAUTHORIZED';
-        else if (t.status === 'REVOKED') result = 'REVOKED';
-        else if (t.status === 'BLOCKED') result = 'BLOCKED';
-        else if (new Date(ev.ends_at) < when) result = 'EXPIRED';
-        else {
-          const u = await tx.query(`UPDATE tickets SET status='USED',used_at=$2 WHERE id=$1 AND status='ISSUED' RETURNING id`, [t.id, when]);
-          result = u.rows.length || st.reentryAllowed ? 'VALID' : 'ALREADY_USED';
-        }
-        await tx.query('INSERT INTO entry_scans(event_id,gate_id,ticket_id,operator_id,result,client_id,offline,created_at) VALUES($1,$2,$3,$4,$5,$6,true,$7)', [ev.id, sc.gateId ?? null, t?.id ?? null, req.user!.id, result, clientId, when]);
+        const dir: 'IN' | 'OUT' = sc.direction === 'OUT' ? 'OUT' : 'IN';
+        const result = await applyScan(tx, ev, st, t, dir, when);
+        await tx.query('INSERT INTO entry_scans(event_id,gate_id,ticket_id,operator_id,result,direction,client_id,offline,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,true,$8)', [ev.id, sc.gateId ?? null, t?.id ?? null, req.user!.id, result, dir, clientId, when]);
         // o dispositivo disse VALID mas o servidor já tinha o bilhete usado: houve dupla entrada entre portas
-        return { clientId, result, conflict: result === 'ALREADY_USED' && sc.localResult === 'VALID' };
+        return { clientId, result, conflict: (result === 'ALREADY_USED' || result === 'ALREADY_INSIDE') && sc.localResult === 'VALID' };
       }));
     }
     return { results: out, conflicts: out.filter((x) => x.conflict).length };
@@ -2052,7 +2054,7 @@ Bilhete+` });
       alerts.push({ level: 'warn', text: `Bilhete ${String(r.id).slice(0, 8).toUpperCase()} lido ${r.n} vezes depois de já utilizado.` });
     const unauth = (await q(`SELECT count(*)::int AS n FROM entry_scans WHERE event_id=$1 AND result IN ('UNAUTHORIZED','REVOKED') AND created_at > now() - interval '1 hour'`))[0].n;
     if (unauth >= 5) alerts.push({ level: 'warn', text: `${unauth} leituras recusadas (não autorizado/revogado) na última hora.` });
-    const conflicts = (await q(`SELECT count(*)::int AS n FROM entry_scans WHERE event_id=$1 AND offline AND result='ALREADY_USED'`))[0].n;
+    const conflicts = (await q(`SELECT count(*)::int AS n FROM entry_scans WHERE event_id=$1 AND offline AND result IN ('ALREADY_USED','ALREADY_INSIDE')`))[0].n;
     if (conflicts > 0) alerts.push({ level: 'warn', text: `${conflicts} leituras offline em conflito (bilhete já tinha sido usado noutra porta).` });
     const out = (await q(`SELECT count(*)::int AS n FROM refund_requests r JOIN wallets w ON w.id=r.wallet_id WHERE w.event_id=$1 AND r.status='PENDING'`))[0].n;
     if (out > 0) alerts.push({ level: 'warn', text: `${out} pedidos de reembolso a aguardar decisão.` });

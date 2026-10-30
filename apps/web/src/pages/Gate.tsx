@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, dt } from '../api';
-import { loadManifest, loadQueue, newClientId, saveManifest, saveQueue, validateLocal, type QueuedScan } from '../gateOffline';
+import { loadManifest, loadQueue, newClientId, saveManifest, saveQueue, validateLocal, type Direction, type QueuedScan } from '../gateOffline';
 import { Empty, FullResult, Icon, Layout, PageHead, ScanInput, Skeleton, useToast } from '../ui';
 
-const TEXT: Record<string, string> = { VALID: 'ENTRADA VÁLIDA', ALREADY_USED: 'JÁ UTILIZADO', EXPIRED: 'EXPIRADO', REVOKED: 'BILHETE CANCELADO', BLOCKED: 'BILHETE BLOQUEADO', UNAUTHORIZED: 'NÃO AUTORIZADO', ERROR: 'ERRO DE LEITURA' };
-const SHORT: Record<string, string> = { VALID: 'Válido', ALREADY_USED: 'Já utilizado', EXPIRED: 'Expirado', REVOKED: 'Cancelado', BLOCKED: 'Bloqueado', UNAUTHORIZED: 'Não autorizado', ERROR: 'Erro' };
+const TEXT: Record<string, string> = { VALID: 'ENTRADA VÁLIDA', EXIT_OK: 'SAÍDA REGISTADA', ALREADY_INSIDE: 'JÁ ESTÁ DENTRO', NOT_INSIDE: 'NÃO ENTROU', ALREADY_USED: 'JÁ UTILIZADO', EXPIRED: 'EXPIRADO', REVOKED: 'BILHETE CANCELADO', BLOCKED: 'BILHETE BLOQUEADO', UNAUTHORIZED: 'NÃO AUTORIZADO', ERROR: 'ERRO DE LEITURA' };
+const SHORT: Record<string, string> = { VALID: 'Entrada', EXIT_OK: 'Saída', ALREADY_INSIDE: 'Já dentro', NOT_INSIDE: 'Não entrou', ALREADY_USED: 'Já utilizado', EXPIRED: 'Expirado', REVOKED: 'Cancelado', BLOCKED: 'Bloqueado', UNAUTHORIZED: 'Não autorizado', ERROR: 'Erro' };
 
 export function Gate({ me }: { me: any }) {
   const [events, setEvents] = useState<any[] | null>(null);
   const [eid, setEid] = useState('');
   const [gates, setGates] = useState<any[]>([]);
   const [gate, setGate] = useState('');
+  const [dir, setDir] = useState<Direction>('IN'); // sentido da leitura: Entrada ou Saída
   const [stats, setStats] = useState<any>(null);
   const [result, setResult] = useState<{ kind: string; offline: boolean; ticket?: { type: string; holder: string; usedAt: string | null; firstGate: string | null; reason?: string | null } | null } | null>(null);
   const [online, setOnline] = useState(navigator.onLine);
@@ -67,21 +68,21 @@ export function Gate({ me }: { me: any }) {
     const offlineScan = async () => {
       const m = loadManifest(eid);
       if (!m) { setResult({ kind: 'ERROR', offline: true }); return; }
-      const v = await validateLocal(m, token);
+      const v = await validateLocal(m, token, dir);
       saveManifest(eid, v.manifest);
-      saveQueue(eid, [...loadQueue(eid), { clientId: newClientId(), token, at: new Date().toISOString(), gateId: gate || undefined, localResult: v.result }]);
+      saveQueue(eid, [...loadQueue(eid), { clientId: newClientId(), token, at: new Date().toISOString(), gateId: gate || undefined, localResult: v.result, direction: dir }]);
       refreshLocal(eid);
       setResult({ kind: v.result, offline: true });
     };
     try {
       if (!navigator.onLine || forceOffline) await offlineScan();
-      else { const r = await api('POST', `/events/${eid}/scan`, { token, gateId: gate || undefined }); setResult({ kind: r.result, offline: false, ticket: r.ticket }); }
+      else { const r = await api('POST', `/events/${eid}/scan`, { token, gateId: gate || undefined, direction: dir }); setResult({ kind: r.result, offline: false, ticket: r.ticket }); }
     } catch (e: any) {
       // falha de rede (sem resposta do servidor): se houver lista local, valida offline
       if (e?.status === undefined && loadManifest(eid)) await offlineScan(); else setResult({ kind: 'ERROR', offline: false });
     }
     load();
-  }, [eid, gate, load, refreshLocal]);
+  }, [eid, gate, dir, load, refreshLocal]);
 
   const pct = stats && stats.issued ? Math.round((stats.entered / stats.issued) * 100) : 0;
   const offlineNow = !online || (window as any).__forceOffline === true;
@@ -91,6 +92,10 @@ export function Gate({ me }: { me: any }) {
         {events && events.length > 1 && <select aria-label="Evento" value={eid} onChange={(e) => setEid(e.target.value)}>{events.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select>}
         <select aria-label="Porta" value={gate} onChange={(e) => setGate(e.target.value)}><option value="">Todas as portas</option>{gates.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select></>} />
       {!events ? <Skeleton rows={3} /> : events.length === 0 ? <Empty icon="door">Sem eventos activos.</Empty> : <div className="stack">
+        <div className="seg dirseg" role="tablist" aria-label="Sentido da leitura">
+          <button role="tab" aria-selected={dir === 'IN'} className={dir === 'IN' ? 'on' : ''} onClick={() => setDir('IN')}><Icon n="arrowdown" />Entrada</button>
+          <button role="tab" aria-selected={dir === 'OUT'} className={dir === 'OUT' ? 'on out' : ''} onClick={() => setDir('OUT')}><Icon n="arrowup" />Saída</button>
+        </div>
         <div className="card"><ScanInput onScan={scan} disabled={result !== null} autoStart continuous placeholder="Digitar o código do bilhete" /></div>
 
         <div className="card flat between">
@@ -102,13 +107,14 @@ export function Gate({ me }: { me: any }) {
           </span>
         </div>
 
-        {stats && <div className="kpis"><div className="kpi"><span>Entradas</span><b>{stats.entered}</b><small>{pct}% dos {stats.issued} bilhetes emitidos</small></div>
+        {stats && <div className="kpis"><div className="kpi"><span>Dentro agora</span><b>{stats.inside ?? 0}</b>{stats.capacity ? <small>de {stats.capacity} de lotação</small> : null}</div>
+          <div className="kpi"><span>Já entraram</span><b>{stats.entered}</b><small>{pct}% dos {stats.issued} emitidos</small></div>
           <div className="kpi"><span>Por entrar</span><b>{Math.max(0, stats.issued - stats.entered)}</b></div></div>}
         {stats && <div className="card"><h3>Últimas leituras</h3>{stats.recent.length === 0 ? <p className="muted">Ainda sem leituras.</p> :
-          <table><tbody>{stats.recent.map((r: any, i: number) => <tr key={i}><td>{dt(r.created_at)}</td><td className="right"><span className={'pill ' + (r.result === 'VALID' ? 'ok' : r.result === 'ALREADY_USED' || r.result === 'EXPIRED' ? 'warn' : 'bad')}>{SHORT[r.result] ?? r.result}</span></td></tr>)}</tbody></table>}</div>}
+          <table><tbody>{stats.recent.map((r: any, i: number) => <tr key={i}><td>{dt(r.created_at)}</td><td className="right"><span className={'pill ' + (r.result === 'VALID' || r.result === 'EXIT_OK' ? 'ok' : r.result === 'ALREADY_USED' || r.result === 'ALREADY_INSIDE' || r.result === 'NOT_INSIDE' || r.result === 'EXPIRED' ? 'warn' : 'bad')}>{SHORT[r.result] ?? r.result}</span></td></tr>)}</tbody></table>}</div>}
       </div>}
       {result && <FullResult kind={result.kind} title={TEXT[result.kind] ?? result.kind} detail={result.offline ? 'Validado sem rede · será sincronizado' : result.ticket ? <><b>{result.ticket.holder}</b><br />{result.ticket.type}{result.kind === 'ALREADY_USED' && result.ticket.usedAt ? <><br />Já entrou às {new Date(result.ticket.usedAt).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}{result.ticket.firstGate ? ` · ${result.ticket.firstGate}` : ''}</> : null}{result.ticket.reason ? <><br />Motivo: {result.ticket.reason}</> : null}</> : undefined}
-        onClose={() => { showing.current = false; setResult(null); }} autoCloseMs={result.kind === 'VALID' ? 2600 : undefined} />}
+        onClose={() => { showing.current = false; setResult(null); }} autoCloseMs={result.kind === 'VALID' || result.kind === 'EXIT_OK' ? 2600 : undefined} />}
       {toast.node}
     </Layout>
   );

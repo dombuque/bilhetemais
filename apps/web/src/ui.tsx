@@ -133,7 +133,7 @@ export const PageHead = ({ title, sub, actions }: { title: string; sub?: ReactNo
 /** Resultado de ecrã inteiro (portaria / pagamento), com vibração e som curto. */
 export function FullResult({ kind, title, detail, onClose, autoCloseMs }: { kind: string; title: string; detail?: ReactNode; onClose: () => void; autoCloseMs?: number }) {
   useEffect(() => {
-    const good = kind === 'VALID' || kind === 'OK';
+    const good = kind === 'VALID' || kind === 'OK' || kind === 'EXIT_OK';
     try { navigator.vibrate?.(good ? 60 : [120, 60, 120]); } catch { /* sem vibração */ }
     try {
       const ctx = new AudioContext(); const o = ctx.createOscillator(); const g = ctx.createGain();
@@ -141,10 +141,10 @@ export function FullResult({ kind, title, detail, onClose, autoCloseMs }: { kind
     } catch { /* sem áudio */ }
     if (autoCloseMs) { const t = setTimeout(onClose, autoCloseMs); return () => clearTimeout(t); }
   }, [kind, autoCloseMs, onClose]);
-  const good = kind === 'VALID' || kind === 'OK';
+  const good = kind === 'VALID' || kind === 'OK' || kind === 'EXIT_OK';
   return (
     <div className={'fullresult ' + kind} role="alert" onClick={onClose}>
-      <Icon n={good ? 'check' : kind === 'ALREADY_USED' || kind === 'EXPIRED' ? 'alert' : 'x'} className="" />
+      <Icon n={good ? 'check' : kind === 'ALREADY_USED' || kind === 'ALREADY_INSIDE' || kind === 'NOT_INSIDE' || kind === 'EXPIRED' ? 'alert' : 'x'} className="" />
       <h1>{title}</h1>{detail && <p>{detail}</p>}
       <button onClick={onClose}>Continuar</button>
     </div>
