@@ -136,5 +136,5 @@ if (import.meta.env.PROD) {
   };
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') hiddenAt = Date.now(); else if (hiddenAt && Date.now() - hiddenAt > 20_000) check(true); });
   setInterval(() => { if (document.visibilityState === 'visible') check(false); }, 10 * 60_000);
-  setTimeout(() => check(false), 15_000);
+  setTimeout(() => check(true), 4_000); // ao abrir: se a versão guardada for antiga, relê logo
 }
