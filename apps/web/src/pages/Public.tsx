@@ -226,6 +226,7 @@ const KIND: Record<string, [string, string]> = { TOPUP: ['Carregamento', 'arrowd
 /** Participante: passe com QR e saldo, carregamento e histórico. */
 export function Wallet({ token, cfg }: { token: string; cfg: Config }) {
   const [w, setW] = useState<any>(null);
+  const [off, setOff] = useState<string | null>(null); // bilhete desativado (evento indisponível)
   const [amount, setAmount] = useState('');
   const toast = useToast();
   const { busy, run } = useAction(toast.show);
@@ -241,10 +242,11 @@ export function Wallet({ token, cfg }: { token: string; cfg: Config }) {
       try { const c = JSON.parse(localStorage.getItem(cacheKey) ?? 'null'); if (c) { setW(c.d); setOfflineAt(c.at); return; } } catch { /* cache inválida */ }
     }
     setW((cur: any) => cur ?? false);
+    if (e?.status === 403) setOff(String(e.message));
   }), [token, cacheKey]);
   useEffect(() => { load(); const t = setInterval(load, 8000); return () => clearInterval(t); }, [load]);
   const openReceipt = (id: string) => run(async () => setReceipt(await api('GET', `/public/tickets/${token}/receipts/${id}`)));
-  if (w === false) return <Frame><Empty icon="ticket">Bilhete não encontrado.</Empty></Frame>;
+  if (w === false) return <Frame><Empty icon="ticket">{off ? off.replace(/^./, (c) => c.toUpperCase()) + '.' : 'Bilhete não encontrado.'}</Empty></Frame>;
   if (!w) return <Frame><Skeleton rows={4} /></Frame>;
 
   return (

@@ -91,3 +91,7 @@
 .pp-tk-edit { justify-self: start; font-size: .85rem; } .pp-tk-nick { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .pp-tk-nick input { flex: 1; min-width: 140px; min-height: 40px; }
 .pp-tk-gone { display: grid; gap: 6px; background: #fff; border: 1px dashed var(--line-strong, #cfcae6); padding: 10px; border-radius: 6px; font-size: .9rem; } .pp-tk-gone small { color: var(--muted); }
 .pp-tk.gone { opacity: .8; background: #f1f0f6; } .pp-tk-st.st-SHARED { background: #e6e2ff; color: #3b2ba8; }
+
+/* bilhetes de eventos desativados (empresa suspensa): visíveis, mas sem acções */
+.pp-tk.off { filter: grayscale(1); pointer-events: none; user-select: none; } .pp-tk-st.st-OFF { background: #e3e3e8; color: #55555f; }
+.pp-group .pp-ticket:has(.pp-tk.off) .pp-ticket-top { background: #6b6a77; }

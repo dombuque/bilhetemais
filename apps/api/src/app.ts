@@ -853,7 +853,7 @@ Bilhete+` });
   /** "Os meus bilhetes": encomendas da conta, com os links dos bilhetes já emitidos. */
   /** Encomendas da conta, com o estado do evento (por atender / passado) e, por bilhete: tipo, saldo da carteira, total gasto e consumos (comerciante, itens). */
   /** Um bilhete visto pela conta: tipo, estado, saldo da carteira, total gasto, consumos, apelido e partilha. */
-  const accountTicket = async (t: { id: string; token: string; status: string; shortCode: string | null }, viewerId: string, recipient = false) => {
+  const accountTicket = async (t: { id: string; token: string; status: string; shortCode: string | null }, viewerId: string, recipient = false, inactive = false) => {
     const row = (await db.query<any>(`SELECT t.wallet_id,t.status_reason,t.nickname,tt.name AS type_name FROM tickets t LEFT JOIN ticket_types tt ON tt.id=t.ticket_type_id WHERE t.id=$1`, [t.id])).rows[0] ?? {};
     let balanceMinor: string | null = null, spentMinor = '0', topupMinor = '0', usage: any[] = [];
     if (row.wallet_id) {
@@ -867,7 +867,7 @@ Bilhete+` });
     const sh = (await db.query<any>(`SELECT s.id,s.claimed_at,a.name AS to_name FROM ticket_shares s LEFT JOIN accounts a ON a.id=s.to_account_id WHERE s.ticket_id=$1 AND s.revoked_at IS NULL ORDER BY s.created_at DESC LIMIT 1`, [t.id])).rows[0];
     return {
       // partilhado e aceite: o bilhete deixou de funcionar para quem o partilhou (o código foi renovado), por isso já não se mostra
-      id: t.id, token: sh?.claimed_at && !recipient ? null : t.token, status: t.status, shortCode: sh?.claimed_at && !recipient ? null : t.shortCode, typeName: row.type_name ?? null, nickname: row.nickname ?? null,
+      id: t.id, token: inactive || (sh?.claimed_at && !recipient) ? null : t.token, status: t.status, shortCode: inactive || (sh?.claimed_at && !recipient) ? null : t.shortCode, inactive, typeName: row.type_name ?? null, nickname: row.nickname ?? null,
       reason: t.status === 'BLOCKED' || t.status === 'REVOKED' ? row.status_reason ?? null : null,
       hasWallet: !!row.wallet_id, balanceMinor, spentMinor, topupMinor, usage,
       share: sh ? { claimed: !!sh.claimed_at, to: sh.to_name ?? null } : null, viewer: viewerId,
@@ -877,24 +877,26 @@ Bilhete+` });
   app.get('/account/orders', h(async (req) => {
     const a = await needAccount(req as Request);
     const os = (await db.query<any>(`SELECT o.id,o.status,o.total_minor,o.created_at,e.name AS event,e.starts_at,e.ends_at,e.location,d.subdomain,
-          (coalesce(e.ends_at, e.starts_at + interval '12 hours') < now()) AS past
+          (coalesce(e.ends_at, e.starts_at + interval '12 hours') < now()) AS past,
+          ((SELECT og.status FROM organizations og WHERE og.id=e.organization_id) <> 'ACTIVE') AS inactive
         FROM ticket_orders o JOIN events e ON e.id=o.event_id LEFT JOIN event_domains d ON d.event_id=o.event_id WHERE o.account_id=$1 ORDER BY e.starts_at DESC, o.created_at DESC LIMIT 100`, [a.id])).rows;
     for (const o of os) {
       const ts = (await orderTickets(db, o.id)).filter((t: any) => t.token);
       o.tickets = [];
-      for (const t of ts) o.tickets.push(await accountTicket(t, a.id));
+      for (const t of ts) o.tickets.push(await accountTicket(t, a.id, false, o.inactive));
     }
     // bilhetes partilhados comigo, agrupados por evento
     const sharedRows = (await db.query<any>(`SELECT t.id,t.status,t.short_code AS "shortCode",t.token_version AS ver,e.id AS event_id,e.name AS event,e.starts_at,e.ends_at,e.location,fa.name AS from_name,
-          (coalesce(e.ends_at, e.starts_at + interval '12 hours') < now()) AS past
+          (coalesce(e.ends_at, e.starts_at + interval '12 hours') < now()) AS past,
+          ((SELECT og.status FROM organizations og WHERE og.id=e.organization_id) <> 'ACTIVE') AS inactive
         FROM ticket_shares s JOIN tickets t ON t.id=s.ticket_id JOIN events e ON e.id=t.event_id JOIN accounts fa ON fa.id=s.from_account_id
        WHERE s.to_account_id=$1 AND s.revoked_at IS NULL AND t.status IN ('ISSUED','USED','BLOCKED','REVOKED') ORDER BY e.starts_at DESC, s.claimed_at DESC`, [a.id])).rows;
     const byEvent = new Map<string, any>();
     for (const r of sharedRows) {
       let o = byEvent.get(r.event_id);
-      if (!o) { o = { id: 'shared-' + r.event_id, shared: true, status: 'PAID', total_minor: '0', event: r.event, starts_at: r.starts_at, ends_at: r.ends_at, location: r.location, past: r.past, tickets: [], fromNames: new Set<string>() }; byEvent.set(r.event_id, o); }
+      if (!o) { o = { id: 'shared-' + r.event_id, shared: true, status: 'PAID', total_minor: '0', event: r.event, starts_at: r.starts_at, ends_at: r.ends_at, location: r.location, past: r.past, inactive: r.inactive, tickets: [], fromNames: new Set<string>() }; byEvent.set(r.event_id, o); }
       o.fromNames.add(r.from_name);
-      o.tickets.push(await accountTicket({ id: r.id, token: tokenFor(r.id, r.ver), status: r.status, shortCode: r.shortCode }, a.id, true));
+      o.tickets.push(await accountTicket({ id: r.id, token: tokenFor(r.id, r.ver), status: r.status, shortCode: r.shortCode }, a.id, true, r.inactive));
     }
     for (const o of byEvent.values()) { o.from = [...o.fromNames].join(', '); delete o.fromNames; os.push(o); }
     return os;
@@ -1016,8 +1018,9 @@ Bilhete+` });
     return { ok: true, delivered: !!cfg.mailer };
   }));
   const byTicketToken = async (token: string) => {
-    const r = await db.query<any>(`SELECT t.id,t.status,t.wallet_id,t.event_id,e.name AS event_name FROM tickets t JOIN events e ON e.id=t.event_id WHERE t.token_hash=$1`, [hashToken(token)]);
+    const r = await db.query<any>(`SELECT t.id,t.status,t.wallet_id,t.event_id,e.name AS event_name,(SELECT og.status FROM organizations og WHERE og.id=e.organization_id) AS org_status FROM tickets t JOIN events e ON e.id=t.event_id WHERE t.token_hash=$1`, [hashToken(token)]);
     if (!r.rows[0] || !r.rows[0].wallet_id) throw new HttpError(404, 'bilhete não encontrado');
+    if (r.rows[0].org_status !== 'ACTIVE') throw new HttpError(403, 'este bilhete está desativado: o evento está indisponível');
     return r.rows[0];
   };
   app.get('/public/tickets/:token', h(async (req) => {

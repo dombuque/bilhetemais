@@ -149,6 +149,7 @@ function TicketCard({ t, n, total, shared, reload }: { t: any; n: number; total:
   const [editing, setEditing] = useState(false);
   const [nick, setNick] = useState(t.nickname ?? '');
   const [link, setLink] = useState<string | null>(null);
+  const off = !!t.inactive; // empresa suspensa: o bilhete fica visível, mas desativado
   const gone = !!t.share?.claimed && !shared; // partilhado e aceite: já não funciona para quem o partilhou
   const bad = t.status === 'BLOCKED' || t.status === 'REVOKED';
   const spent = BigInt(t.spentMinor ?? 0), topup = BigInt(t.topupMinor ?? 0);
@@ -161,12 +162,13 @@ function TicketCard({ t, n, total, shared, reload }: { t: any; n: number; total:
     reload();
   });
   return (
-    <div className={'pp-tk' + (bad ? ' bad' : '') + (gone ? ' gone' : '')}>
+    <div className={'pp-tk' + (bad ? ' bad' : '') + (gone || off ? ' gone' : '') + (off ? ' off' : '')} aria-disabled={off || undefined}>
       <div className="pp-tk-head">
         <b>{t.nickname ? `${t.nickname} · ` : ''}{t.typeName ?? 'Bilhete'}{total > 1 ? ` · ${n}/${total}` : ''}</b>
-        <span className={'pp-tk-st st-' + (gone ? 'SHARED' : t.status)}>{gone ? 'Partilhado' : TICKET_STATE[t.status] ?? t.status}</span>
+        <span className={'pp-tk-st st-' + (off ? 'OFF' : gone ? 'SHARED' : t.status)}>{off ? 'Desativado' : gone ? 'Partilhado' : TICKET_STATE[t.status] ?? t.status}</span>
       </div>
-      {!shared && !gone && (editing
+      {off && <p className="pp-tk-reason" style={{ color: 'var(--muted)' }}>Este bilhete está desativado: o evento deixou de estar disponível. Para esclarecimentos, contacte o organizador.</p>}
+      {!shared && !gone && !off && (editing
         ? <div className="pp-tk-nick"><input value={nick} maxLength={40} placeholder="Apelido (ex.: Ana, Pai…)" aria-label="Apelido do bilhete" onChange={(e) => setNick(e.target.value)} autoFocus />
             <button type="button" className="pp-link" disabled={busy} onClick={() => run(async () => { await accountApi('PATCH', `/account/tickets/${t.id}`, { nickname: nick }); setEditing(false); reload(); }, 'Apelido guardado')}>Guardar</button>
             <button type="button" className="pp-link" onClick={() => { setEditing(false); setNick(t.nickname ?? ''); }}>Cancelar</button></div>
@@ -174,13 +176,13 @@ function TicketCard({ t, n, total, shared, reload }: { t: any; n: number; total:
       {gone && <div className="pp-tk-gone"><b>Partilhado com {t.share.to ?? 'outra pessoa'}.</b><span>Este bilhete já não funciona para si: o código passou para a conta dela.</span>
         {untouched && <button type="button" className="pp-link" disabled={busy} onClick={() => run(async () => { await accountApi('POST', `/account/tickets/${t.id}/unshare`, {}); reload(); }, 'Acesso retirado: o bilhete voltou para si')}>Retirar acesso</button>}</div>}
       {bad && t.reason && <p className="pp-tk-reason">Motivo: {t.reason}</p>}
-      {!gone && t.hasWallet && !bad && <div className="pp-tk-bal">
+      {!gone && !off && t.hasWallet && !bad && <div className="pp-tk-bal">
         <div><small>Saldo</small><strong>{mt(t.balanceMinor)}</strong></div>
         <div><small>Carregado</small><span>{mt(topup)}</span></div>
         <div><small>Gasto</small><span>{mt(spent)}</span></div>
       </div>}
-      {!gone && t.token && <a className="pp-btn alt" href={`/t/${t.token}`}><Icon n="ticket" />Abrir bilhete (QR{t.hasWallet ? ' e carteira' : ''})</a>}
-      {!shared && !gone && untouched && (
+      {!gone && !off && t.token && <a className="pp-btn alt" href={`/t/${t.token}`}><Icon n="ticket" />Abrir bilhete (QR{t.hasWallet ? ' e carteira' : ''})</a>}
+      {!shared && !gone && !off && untouched && (
         t.share && !t.share.claimed
           ? <div className="pp-tk-gone"><b>Link de partilha gerado.</b><span>Ainda ninguém o aceitou. Pode gerar outro ou cancelar.</span>
               <span className="inline"><button type="button" className="pp-link" disabled={busy} onClick={doShare}>Gerar outro link</button><button type="button" className="pp-link" disabled={busy} onClick={() => run(async () => { await accountApi('POST', `/account/tickets/${t.id}/unshare`, {}); setLink(null); reload(); }, 'Partilha cancelada')}>Cancelar partilha</button></span></div>
@@ -235,8 +237,9 @@ function OrderGroup({ items, empty, past, reload }: { items: any[]; empty: strin
           <div className="pp-ticket-bot">
             {o.shared
               ? <div className="between"><span className="pp-tk-st st-SHARED">Partilhado consigo</span><small className="muted">por {o.from}</small></div>
+              : o.inactive ? <div className="between"><span className="pp-tk-st st-OFF">Evento desativado</span><b>{BigInt(o.total_minor) === 0n ? 'Grátis' : mt(o.total_minor)}</b></div>
               : <div className="between"><Pill s={o.status} /><b>{BigInt(o.total_minor) === 0n ? 'Grátis' : mt(o.total_minor)}</b></div>}
-            {o.status === 'PENDING_PAYMENT' && !past && <a className="pp-btn" href={`/o/${o.id}`}>Pagar esta encomenda</a>}
+            {o.status === 'PENDING_PAYMENT' && !past && !o.inactive && <a className="pp-btn" href={`/o/${o.id}`}>Pagar esta encomenda</a>}
             {o.tickets.map((t: any, i: number) => <TicketCard key={t.id} t={t} n={i + 1} total={o.tickets.length} shared={!!o.shared} reload={reload} />)}
           </div>
         </article>))}</div>}
