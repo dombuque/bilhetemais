@@ -410,7 +410,7 @@ Bilhete+` });
     if (!cfg.push) return 0;
     const rows = (await db.query<any>(`SELECT DISTINCT o.account_id, e.id AS event_id, e.name, e.starts_at, e.location, d.subdomain
         FROM ticket_orders o JOIN tickets t ON t.order_id=o.id AND t.status IN ('ISSUED','USED') JOIN events e ON e.id=o.event_id LEFT JOIN event_domains d ON d.event_id=e.id
-       WHERE o.account_id IS NOT NULL AND e.status='PUBLISHED' AND e.starts_at > now() AND e.starts_at <= now() + interval '24 hours'
+       WHERE o.account_id IS NOT NULL AND e.status='PUBLISHED' AND (SELECT og.status FROM organizations og WHERE og.id=e.organization_id)='ACTIVE' AND e.deleted_at IS NULL AND e.starts_at > now() AND e.starts_at <= now() + interval '24 hours'
          AND NOT EXISTS (SELECT 1 FROM push_sent s WHERE s.account_id=o.account_id AND s.event_id=e.id AND s.kind='reminder24h')`)).rows;
     let n = 0;
     for (const r of rows) {
@@ -535,7 +535,7 @@ Bilhete+` });
 
   // ---------- público (participante) ----------
   const publicEvent = async (sub: string) => {
-    const r = await db.query<any>(`SELECT e.* FROM event_domains d JOIN events e ON e.id=d.event_id WHERE d.subdomain=$1 AND e.status='PUBLISHED'`, [sub]);
+    const r = await db.query<any>(`SELECT e.* FROM event_domains d JOIN events e ON e.id=d.event_id WHERE d.subdomain=$1 AND e.status='PUBLISHED' AND (SELECT og.status FROM organizations og WHERE og.id=e.organization_id)='ACTIVE' AND e.deleted_at IS NULL`, [sub]);
     if (!r.rows[0]) throw new HttpError(404, 'evento não encontrado');
     return r.rows[0];
   };
@@ -1362,7 +1362,7 @@ Bilhete+` });
   app.get('/public/events/:sub/assets/:kind', async (req, res, next) => {
     try {
       const kind = assetKind(req.params.kind);
-      const e = await db.query<any>(`SELECT e.id,e.organization_id FROM event_domains d JOIN events e ON e.id=d.event_id WHERE d.subdomain=$1 AND e.status='PUBLISHED'`, [req.params.sub]);
+      const e = await db.query<any>(`SELECT e.id,e.organization_id FROM event_domains d JOIN events e ON e.id=d.event_id WHERE d.subdomain=$1 AND e.status='PUBLISHED' AND (SELECT og.status FROM organizations og WHERE og.id=e.organization_id)='ACTIVE' AND e.deleted_at IS NULL`, [req.params.sub]);
       if (!e.rows[0]) throw new HttpError(404, 'sem imagem');
       const ids = (await chainOf(db, e.rows[0].id)).map((c) => c.id).reverse(); // do próprio evento para a raiz
       const r = await db.query<any>(
@@ -1631,7 +1631,7 @@ Bilhete+` });
   app.get('/public/events/:sub/images/:img', async (req, res, next) => {
     try {
       const r = await db.query<any>(`SELECT i.content_type,i.data FROM event_domains d JOIN events e ON e.id=d.event_id JOIN event_images i ON i.event_id=e.id
-        WHERE d.subdomain=$1 AND e.status='PUBLISHED' AND i.id=$2`, [req.params.sub, req.params.img]);
+        WHERE d.subdomain=$1 AND e.status='PUBLISHED' AND (SELECT og.status FROM organizations og WHERE og.id=e.organization_id)='ACTIVE' AND e.deleted_at IS NULL AND i.id=$2`, [req.params.sub, req.params.img]);
       if (!r.rows[0]) throw new HttpError(404, 'sem imagem');
       res.set({ 'Content-Type': r.rows[0].content_type, 'Cache-Control': 'public, max-age=300', 'X-Content-Type-Options': 'nosniff' }).send(r.rows[0].data);
     } catch (e) { next(e); }
