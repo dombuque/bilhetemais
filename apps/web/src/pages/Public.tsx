@@ -47,16 +47,16 @@ function Cover({ brand, title, children }: { brand: Brand; title: string; childr
 
 export function PublicEvent({ slug, cfg }: { slug: string; cfg: Config }) {
   const [ev, setEv] = useState<any>(null);
-  const [err, setErr] = useState(false);
+  const [err, setErr] = useState<string | false>(false);
   const [qty, setQty] = useState<Record<string, number>>({});
   const [checkout, setCheckout] = useState(false);
   const [phone, setPhone] = useState(() => { try { return localStorage.getItem('bp_phone') ?? ''; } catch { return ''; } });
   const { me, refresh, logout } = useAccount();
   const toast = useToast();
   const { busy, run } = useAction(toast.show);
-  useEffect(() => { api('GET', `/public/events/${slug}`).then(setEv).catch(() => setErr(true)); }, [slug]);
+  useEffect(() => { api('GET', `/public/events/${slug}`).then(setEv).catch((e) => setErr(e?.message ? String(e.message).replace(/^./, (c: string) => c.toUpperCase()) + '.' : 'Evento não encontrado.')); }, [slug]);
 
-  if (err) return <Frame><Empty icon="ticket">Evento não encontrado ou ainda não publicado.</Empty></Frame>;
+  if (err) return <Frame><Empty icon="ticket">{err}</Empty></Frame>;
   if (!ev) return <Frame><Skeleton rows={4} /></Frame>;
 
   const items = Object.entries(qty).filter(([, n]) => n > 0).map(([ticketTypeId, n]) => ({ ticketTypeId, qty: n }));

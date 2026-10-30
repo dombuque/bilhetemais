@@ -114,6 +114,7 @@ const idle = (window as any).requestIdleCallback ?? ((f: () => void) => setTimeo
 idle(() => { import('./pages/Participant'); import('./pages/Public'); import('./pages/Discover'); import('./map/Maps'); });
 
 captureInstallPrompt();
+setTimeout(() => { import('./push').then((m) => m.syncPush()); }, 3000);
 installTranslator();
 createRoot(document.getElementById('root')!).render(<StrictMode><Suspense fallback={null}><App /></Suspense></StrictMode>);
 if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('/sw.js').catch(() => {});

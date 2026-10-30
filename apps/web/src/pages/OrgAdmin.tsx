@@ -211,7 +211,9 @@ function EventAdmin({ id, back, toast, onOpen }: { id: string; back: () => void;
       <a href="#back" onClick={(e) => { e.preventDefault(); back(); }} className="crumb"><Icon n="back" />Eventos</a>
       <PageHead title={ev.name} sub={<><Pill s={ev.status} /> · {dt(ev.starts_at)}{ov.parent && <> · herda de <a href="#parent" onClick={(e) => { e.preventDefault(); onOpen(ov.parent.id); }}>{ov.parent.name}</a></>}</>}
         actions={<>
-          <a className="btn ghost" href={inApp() ? eventUrl(ev.subdomain) : url} {...(inApp() ? {} : { target: '_blank', rel: 'noreferrer' })}>Ver página pública</a>
+          {ev.status === 'PUBLISHED'
+            ? <a className="btn ghost" href={inApp() ? eventUrl(ev.subdomain) : url} {...(inApp() ? {} : { target: '_blank', rel: 'noreferrer' })}>Ver página pública</a>
+            : <span className="muted small" style={{ alignSelf: 'center' }}>A página pública só abre depois de publicar.</span>}
           {ev.status !== 'PUBLISHED' && <button disabled={busy} onClick={() => act(() => api('POST', `/events/${id}/publish`, {}), 'Evento publicado')}>Publicar</button>}
         </>} />
       <div className="seg scroll" role="tablist" style={{ marginBottom: 18 }}>{TABS.map((t) => <button key={t} role="tab" aria-selected={t === tab} className={t === tab ? 'on' : ''} onClick={() => setTab(t)}>{t}</button>)}</div>

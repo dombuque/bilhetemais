@@ -425,7 +425,7 @@ Bilhete+` });
     let ok = 0;
     for (const s of subs) {
       try { await cfg.push.send(s, msg); ok++; }
-      catch (e: any) { if (e?.statusCode === 404 || e?.statusCode === 410) await db.query('DELETE FROM push_subscriptions WHERE endpoint=$1', [s.endpoint]).catch(() => {}); else console.error('push', e?.statusCode ?? e?.message); }
+      catch (e: any) { if ([401, 403, 404, 410].includes(e?.statusCode)) await db.query('DELETE FROM push_subscriptions WHERE endpoint=$1', [s.endpoint]).catch(() => {}); else console.error('push', e?.statusCode ?? e?.message); }
     }
     return ok;
   };
@@ -580,7 +580,10 @@ Bilhete+` });
   // ---------- público (participante) ----------
   const publicEvent = async (sub: string) => {
     const r = await db.query<any>(`SELECT e.* FROM event_domains d JOIN events e ON e.id=d.event_id WHERE d.subdomain=$1 AND e.status='PUBLISHED' AND (SELECT og.status FROM organizations og WHERE og.id=e.organization_id)='ACTIVE' AND e.deleted_at IS NULL`, [sub]);
-    if (!r.rows[0]) throw new HttpError(404, 'evento não encontrado');
+    if (!r.rows[0]) {
+      const d = (await db.query<any>(`SELECT e.status,e.deleted_at FROM event_domains d JOIN events e ON e.id=d.event_id WHERE d.subdomain=$1`, [sub])).rows[0];
+      throw new HttpError(404, d && !d.deleted_at && d.status === 'DRAFT' ? 'este evento ainda não foi publicado' : 'evento não encontrado');
+    }
     return r.rows[0];
   };
   app.get('/public/events/:sub', h(async (req) => {

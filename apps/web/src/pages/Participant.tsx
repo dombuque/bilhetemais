@@ -3,7 +3,7 @@ import { accountApi, accountToken, dt, mainUrl, mt, onEventHost, setAccountToken
 import { Empty, Icon, LangSwitch, Pill, Skeleton, useAction, useToast } from '../ui';
 import { AppTabs } from '../AppTabs';
 import { InstallButton, isStandalone, useInstall } from '../install';
-import { disablePush, enablePush, pushActive, pushPermission, pushSupported } from '../push';
+import { disablePush, enablePush, pushActive, pushPermission, pushSupported, syncPush } from '../push';
 import './participant.css';
 
 export interface Me { name: string; email: string | null; phone: string | null; hasPassword?: boolean; newsletter?: boolean }
@@ -219,6 +219,7 @@ export function AccountPage({ view = 'tickets' }: { view?: 'tickets' | 'profile'
   const inst = useInstall();
   const [pushOn, setPushOn] = useState(false);
   useEffect(() => { if (pushSupported()) pushActive().then(setPushOn); }, []);
+  useEffect(() => { if (me) syncPush(); }, [me]); // liga o aparelho à conta e refaz a subscrição se a chave do servidor mudou
   const toggle = (k: string) => setOpen(open === k ? null : k);
   const method = me ? (me.email && me.hasPassword === false ? 'Google' : me.email ? 'E-mail' : 'Telemóvel') : '';
 
