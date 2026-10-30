@@ -13,6 +13,16 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <style>
+      /* ecrã de arranque: aparece logo, antes de qualquer código, para a app nunca ficar em branco com internet lenta */
+      html, body { margin: 0; background: #0b0820; }
+      .boot { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: #0b0820; color: #c9c6e2; font: 600 .95rem system-ui, sans-serif; text-align: center; padding: 24px; z-index: 1; }
+      .boot img { width: 84px; height: 84px; border-radius: 20px; }
+      .boot-ring { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgb(255 255 255 / .18); border-top-color: #5ce1ff; animation: bootspin .8s linear infinite; }
+      .boot button { margin-top: 6px; min-height: 46px; padding: 0 22px; border-radius: 12px; border: 0; background: #5ce1ff; color: #0b0820; font: 700 .95rem system-ui, sans-serif; }
+      @keyframes bootspin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .boot-ring { animation-duration: 2.4s; } }
+    </style>
     <script>
       /* se um ficheiro da app falhar (versão antiga em cache), relê-se uma vez e a página nunca fica em branco */
       window.addEventListener('error', function (e) {
@@ -22,7 +32,8 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="boot" id="boot"><img src="/icon-192.png" alt="" width="84" height="84" /><div class="boot-ring" role="status" aria-label="A carregar"></div><span id="boot-msg">A carregar…</span></div></div>
+    <script>setTimeout(function () { var m = document.getElementById("boot-msg"), b = document.getElementById("boot"); if (m && b) { m.textContent = "A ligação está lenta. A continuar a carregar…"; var x = document.createElement("button"); x.textContent = "Tentar de novo"; x.onclick = function () { location.reload(); }; b.appendChild(x); } }, 8000);</script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

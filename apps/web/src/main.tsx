@@ -26,6 +26,11 @@ const Discover = lazy(() => import('./pages/Discover'));
 const LogoOptions = lazy(() => import('./pages/LogoOptions'));
 export type Config = { baseDomain: string | null; publicUrl?: string | null; simulator: boolean; selfRegistration: boolean; mpesa?: boolean; google?: boolean };
 
+/** Carregamento: o mesmo ecrã de arranque do index.html, para nunca haver um ecrã em branco enquanto um ecrã novo descarrega. */
+function Loader() {
+  return <div className="boot"><img src="/icon-192.png" alt="" width="84" height="84" /><div className="boot-ring" role="status" aria-label="A carregar" /></div>;
+}
+
 /** Em `<evento>.<dominio-base>` a raiz mostra a página pública do evento. */
 function subdomainOf(host: string, base: string | null) {
   if (!base || !host.endsWith('.' + base)) return null;
@@ -68,7 +73,7 @@ function App() {
     return () => { window.removeEventListener('popstate', sync); document.removeEventListener('click', click); };
   }, []);
   useEffect(() => { if (cfg && inApp() && path === '/' && !subdomainOf(location.hostname, cfg.baseDomain)) { history.replaceState(history.state, '', '/events'); setPath('/events'); } }, [cfg, path]);
-  if (!cfg) return <div className="splash"><img src="/icon-192.png" alt="" width="84" height="84" /></div>;
+  if (!cfg) return <Loader />;
   return <>
     <Routes key={path} cfg={cfg} path={path} />
     {path !== '/events' && <BackToTop />}
@@ -95,14 +100,14 @@ function Routes({ cfg, path }: { cfg: Config; path: string }) {
   if ((m = /^\/e\/([a-z0-9-]+)$/.exec(path))) return <PublicEvent slug={m[1]} cfg={cfg} />;
   if ((m = /^\/o\/([0-9a-f-]{36})$/.exec(path))) return <Order id={m[1]} cfg={cfg} />;
   if ((m = /^\/t\/([\w-]+)$/.exec(path))) return <Wallet token={m[1]} cfg={cfg} />;
-  if ((m = /^\/claim\/([\w-]+)$/.exec(path))) return <Suspense fallback={null}><ClaimTicket code={m[1]} /></Suspense>;
-  if (path === '/account/done') return <Suspense fallback={null}><AccountDone /></Suspense>;
-  if (path === '/newsletter/unsubscribe') return <Suspense fallback={null}><Unsubscribe /></Suspense>;
-  if (path === '/account' || path === '/account/') return <Suspense fallback={null}><AccountPage view="tickets" /></Suspense>;
-  if (path === '/account/profile' || path === '/account/profile/') return <Suspense fallback={null}><AccountPage view="profile" /></Suspense>;
+  if ((m = /^\/claim\/([\w-]+)$/.exec(path))) return <Suspense fallback={<Loader />}><ClaimTicket code={m[1]} /></Suspense>;
+  if (path === '/account/done') return <Suspense fallback={<Loader />}><AccountDone /></Suspense>;
+  if (path === '/newsletter/unsubscribe') return <Suspense fallback={<Loader />}><Unsubscribe /></Suspense>;
+  if (path === '/account' || path === '/account/') return <Suspense fallback={<Loader />}><AccountPage view="tickets" /></Suspense>;
+  if (path === '/account/profile' || path === '/account/profile/') return <Suspense fallback={<Loader />}><AccountPage view="profile" /></Suspense>;
   if (path === '/app' || path === '/app/') { location.replace('/events'); return null; } // início da app instalada
-  if (path === '/logo-options') return <Suspense fallback={null}><LogoOptions /></Suspense>;
-  if (path === '/events') return <Suspense fallback={null}><Discover /></Suspense>;
+  if (path === '/logo-options') return <Suspense fallback={<Loader />}><LogoOptions /></Suspense>;
+  if (path === '/events') return <Suspense fallback={<Loader />}><Discover /></Suspense>;
   if (path === '/register') return cfg.selfRegistration ? <Register /> : <RegistrationClosed />;
   if ((m = /^\/company\/([a-z0-9-]+)\/?$/.exec(path))) return <Staff orgSlug={m[1]} cfg={cfg} />;
   if (path === '/platform' || path === '/platform/') return <Staff area="platform" cfg={cfg} />;
@@ -118,7 +123,7 @@ idle(() => { import('./pages/Participant'); import('./pages/Public'); import('./
 captureInstallPrompt();
 setTimeout(() => { import('./push').then((m) => m.syncPush()); }, 3000);
 installTranslator();
-createRoot(document.getElementById('root')!).render(<StrictMode><Suspense fallback={null}><App /></Suspense></StrictMode>);
+createRoot(document.getElementById('root')!).render(<StrictMode><Suspense fallback={<Loader />}><App /></Suspense></StrictMode>);
 if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
 /** Actualização automática: ao voltar à app (e de 10 em 10 minutos) confere se há versão nova; se houver, recarrega sozinha quando a app esteve em segundo plano, ou avisa. */
