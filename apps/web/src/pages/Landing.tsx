@@ -12,13 +12,13 @@ const QUICK: [string, string][] = [['?category=MUSICA', 'Música'], ['?category=
 const TICKER = ['Bilhetes online', 'Carteira cashless', 'Pulseiras NFC', 'QR e código de barras', 'POS para comerciantes', 'Portaria sem filas', 'Relatórios em tempo real', 'Em meticais'];
 const TILES: { k: string; no: string; t: string; d: string; wide?: boolean }[] = [
   { k: 'v', no: '01', t: 'Bilhetes online e no balcão', d: 'Páginas de evento com a sua marca, lotes, categorias e stock em tempo real.' },
-  { k: 'c', no: '02', t: 'Carteira cashless', d: 'Um saldo por participante, carregado por M-Pesa, e-Mola, cartão ou numerário.' },
+  { k: 'c', no: '02', t: 'Carteira cashless', d: 'Um saldo por participante, carregado por M-Pesa ou em numerário no balcão.' },
   { k: 'p', no: '03', t: 'POS para comerciantes', d: 'Bares e bancas cobram com QR, código de barras ou pulseira, com comprovativo.' },
   { k: 'k', no: '04', t: 'Portaria sem filas', d: 'Validação instantânea, com câmara ou leitor, e modo offline com sincronização.' },
   { k: 'y', no: '05', t: 'Pulseiras e cartões NFC', d: 'Pague com um toque. Perdeu? Bloqueia e substitui sem perder o saldo.' },
   { k: 'v', no: '06', t: 'Relatórios que fecham', d: 'Receita de bilhética, carregamentos, acertos com comerciantes e reconciliação automática.', wide: true },
 ];
-const STEPS: [string, string][] = [['Ligue a sua empresa', 'A equipa Bilhete+ cria a conta da empresa e dá acesso à sua equipa.'], ['Crie e personalize', 'Bilhetes, parâmetros, cores, imagens e local no mapa. Reaproveite outro evento.'], ['Venda, receba e controle', 'Bilhetes online e no balcão, pagamentos nos comerciantes, portaria e relatórios.']];
+const STEPS: [string, string][] = [['Registe a empresa', 'Preencha os dados e a equipa Bilhete+ valida e aprova. Depois dá acesso à sua equipa.'], ['Crie e personalize', 'Bilhetes, parâmetros, cores, imagens e local no mapa. Reaproveite outro evento.'], ['Venda, receba e controle', 'Bilhetes online e no balcão, pagamentos nos comerciantes, portaria e relatórios.']];
 
 const price = (e: Ev) => (e.minPriceMinor === null ? 'Em breve' : BigInt(e.minPriceMinor) === 0n ? 'Grátis' : mt(e.minPriceMinor));
 const dayTag = (d: string) => new Date(d).toLocaleDateString(locale(), { day: '2-digit', month: 'short', year: 'numeric' }).replace(/\./g, '').toUpperCase();
