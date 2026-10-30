@@ -172,10 +172,27 @@ function TicketCard({ t, n, total }: { t: any; n: number; total: number }) {
   );
 }
 
-function OrderGroup({ title, items, empty, past }: { title: string; items: any[]; empty: string; past?: boolean }) {
+/** Bilhetes por prioridade: «Próximos» (por pagar primeiro, depois o evento mais próximo) e «Passados» (o mais recente primeiro). */
+function TicketTabs({ orders }: { orders: any[] }) {
+  const next = orders.filter((o) => !o.past).sort((a, b) => (a.status === 'PENDING_PAYMENT' ? 0 : 1) - (b.status === 'PENDING_PAYMENT' ? 0 : 1) || +new Date(a.starts_at) - +new Date(b.starts_at));
+  const past = orders.filter((o) => o.past).sort((a, b) => +new Date(b.starts_at) - +new Date(a.starts_at));
+  const [tab, setTab] = useState<'next' | 'past'>(next.length === 0 && past.length > 0 ? 'past' : 'next');
+  return (
+    <>
+      <div className="pp-tabs" role="tablist" aria-label="Filtrar bilhetes">
+        <button type="button" role="tab" aria-selected={tab === 'next'} className={tab === 'next' ? 'on' : ''} onClick={() => setTab('next')}>Próximos<span>{next.length}</span></button>
+        <button type="button" role="tab" aria-selected={tab === 'past'} className={tab === 'past' ? 'on' : ''} onClick={() => setTab('past')}>Passados<span>{past.length}</span></button>
+      </div>
+      {tab === 'next'
+        ? <OrderGroup items={next} empty="Sem eventos próximos. Veja os eventos e escolha o seu." />
+        : <OrderGroup items={past} empty="Ainda sem eventos passados." past />}
+    </>
+  );
+}
+
+function OrderGroup({ items, empty, past }: { items: any[]; empty: string; past?: boolean }) {
   return (
     <section className={'pp-group' + (past ? ' past' : '')}>
-      <h2 className="pp-group-h">{title}<span>{items.length}</span></h2>
       {items.length === 0 ? <p className="pp-sub">{empty}</p> : <div className="pp-orders">{items.map((o) => (
         <article className="pp-ticket" key={o.id}>
           <div className="pp-ticket-top">
@@ -235,8 +252,7 @@ export function AccountPage({ view = 'tickets' }: { view?: 'tickets' | 'profile'
         {urlError && GOOGLE_ERRORS[urlError] && !me && <p className="pp-alert" role="alert">{GOOGLE_ERRORS[urlError]}</p>}
         {me === undefined ? <Skeleton rows={3} /> : me === null ? <AuthPanel onDone={refresh} next={location.pathname} intro="Entre para ver os seus bilhetes e o seu perfil." /> : <>
           {view === 'tickets' && (!orders ? <Skeleton rows={3} /> : orders.length === 0 ? <div className="pp-card"><Empty icon="ticket">Ainda não comprou bilhetes. <a href="/events">Ver eventos</a></Empty></div> : <>
-            <OrderGroup title="Por atender" empty="Sem eventos por atender." items={orders.filter((o) => !o.past)} />
-            <OrderGroup title="Eventos passados" empty="Ainda sem eventos passados." items={orders.filter((o) => o.past)} past />
+            <TicketTabs orders={orders} />
           </>)}
 
           {view === 'profile' && <div className="pp-list">
@@ -258,7 +274,7 @@ export function AccountPage({ view = 'tickets' }: { view?: 'tickets' | 'profile'
               <label className="pp-check"><input type="checkbox" checked={me.newsletter !== false} disabled={busy} onChange={(e) => run(async () => { await accountApi('PATCH', '/account/me', { newsletter: e.target.checked }); refresh(); }, e.target.checked ? 'Newsletter ativada' : 'Newsletter desativada')} /><span>Receber novidades e eventos por e-mail.</span></label>
               <p className="pp-sub">Os e-mails das suas compras (bilhetes e pagamentos) continuam a chegar sempre.</p>
             </Row>}
-            {pushSupported() && <section className="pp-row-item"><div className="pp-row-head static"><span className="pp-row-ic"><Icon n="bell" /></span><span className="pp-row-tx"><b>Notificações</b><small>{pushPermission() === 'denied' ? 'Bloqueadas nas definições do aparelho' : 'Novos eventos e bilhetes confirmados'}</small></span>
+            {pushSupported() && <section className="pp-row-item"><div className="pp-row-head static"><span className="pp-row-ic"><Icon n="bell" /></span><span className="pp-row-tx"><b>Notificações</b><small>{pushPermission() === 'denied' ? 'Bloqueadas nas definições do aparelho' : 'Novos eventos num raio de 150 km e bilhetes confirmados'}</small></span>
               <label className="pp-switch"><input type="checkbox" checked={pushOn} disabled={busy || pushPermission() === 'denied'} onChange={(e) => run(async () => { if (e.target.checked) { const ok = await enablePush(); setPushOn(ok); if (!ok) throw new Error('Não foi possível ativar as notificações.'); } else { await disablePush(); setPushOn(false); } }, e.target.checked ? 'Notificações ativadas' : 'Notificações desativadas')} /><span /></label></div></section>}
             <section className="pp-row-item"><div className="pp-row-head static"><span className="pp-row-ic"><Icon n="globe" /></span><span className="pp-row-tx"><b>Idioma</b></span><LangSwitch always /></div></section>
             {inst.canPrompt && !inst.installed && <section className="pp-row-item"><div className="pp-row-head static"><span className="pp-row-ic"><Icon n="arrowdown" /></span><span className="pp-row-tx"><b>App no telemóvel</b><small>Instale o Bilhete+ no ecrã principal</small></span><InstallButton label="Instalar" className="pp-link" /></div></section>}

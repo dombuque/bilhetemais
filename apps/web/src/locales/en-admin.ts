@@ -15,7 +15,7 @@ export const EN_ADMIN: Record<string, string> = {
   'este endereço já está em uso, escolha outro': 'this address is already in use, choose another', 'este endereço é reservado, escolha outro': 'this address is reserved, choose another', 'o endereço do evento deve ter pelo menos 3 letras ou números': 'the event address must have at least 3 letters or numbers',
   'Bilhete+ no seu telemóvel': 'Bilhete+ on your phone', 'Eventos e bilhetes sempre à mão, em ecrã inteiro.': 'Events and tickets always at hand, full screen.',
   'No Safari: toque em Partilhar ⬆️ e depois em «Adicionar ao ecrã principal».': 'In Safari: tap Share ⬆️, then “Add to Home Screen”.',
-  'Notificações': 'Notifications', 'Bloqueadas nas definições do aparelho': 'Blocked in the device settings', 'Novos eventos e bilhetes confirmados': 'New events and confirmed tickets', 'Notificações ativadas': 'Notifications enabled', 'Notificações desativadas': 'Notifications disabled', 'Não foi possível ativar as notificações.': 'Could not enable notifications.',
+  'Notificações': 'Notifications', 'Bloqueadas nas definições do aparelho': 'Blocked in the device settings', 'Novos eventos num raio de 150 km e bilhetes confirmados': 'New events within 150 km and confirmed tickets', 'Notificações ativadas': 'Notifications enabled', 'Notificações desativadas': 'Notifications disabled', 'Não foi possível ativar as notificações.': 'Could not enable notifications.',
   // ---------- revisão do backoffice em inglês ----------
   'fundos dos participantes': "attendees' funds", '0 = grátis': '0 = free', 'já pago': 'already paid', 'até': 'until', '% dos': '% of', 'bilhetes emitidos': 'tickets issued',
   'Valor devido = vendas − devoluções − comissão. Os saldos dos participantes não são receita do organizador.': 'Amount due = sales − refunds − commission. Attendee balances are not organiser revenue.',
@@ -30,6 +30,7 @@ export const EN_ADMIN: Record<string, string> = {
   'Carregado': 'Topped up', 'Gasto': 'Spent', 'Saldo': 'Balance', 'Compra': 'Purchase', 'Levantamento': 'Cash-out', 'Ajuste': 'Adjustment', 'Bilhete': 'Ticket',
   'Empresa não aprovada': 'Company not approved', 'Quando for aprovada, avisamos por e-mail e esta área abre-se.': 'Once approved, we will let you know by e-mail and this area will open.',
   'Repor palavra-passe': 'Reset password', 'Administrador Bilhete+': 'Bilhete+ administrator', 'Enviar para análise': 'Send for review', 'Enviado para análise': 'Sent for review', 'Pré-registo': 'Pre-registration', 'Análise': 'Review', 'Eliminar definitivamente': 'Delete permanently',
+  'Próximos': 'Upcoming', 'Passados': 'Past', 'Sem eventos próximos. Veja os eventos e escolha o seu.': 'No upcoming events. Browse events and pick yours.',
   // ---------- estados ----------
   'Activa': 'Active', 'Publicado': 'Published', 'Pago': 'Paid', 'Confirmado': 'Confirmed', 'Pendente': 'Pending', 'A aguardar pagamento': 'Awaiting payment', 'Utilizado': 'Used', 'Suspensa': 'Suspended', 'Desactivada': 'Disabled', 'Cancelado': 'Cancelled', 'Bloqueado': 'Blocked', 'Encerrado': 'Closed',
   'Titular': 'Holder', 'Estado': 'Status',

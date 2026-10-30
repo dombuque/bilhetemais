@@ -420,6 +420,12 @@ Bilhete+` });
   const pushUrl = (path: string) => `${(cfg.publicUrl ?? 'https://bilhetemais.live').replace(/\/$/, '')}${path}`;
   const eventAddress = (sub: string | null | undefined) => (sub ? (cfg.baseDomain ? `https://${sub}.${cfg.baseDomain}` : pushUrl('/e/' + sub)) : pushUrl('/events'));
   /** Envia a todas as subscrições dadas; as que já não existem (404/410) são apagadas. Nunca rebenta o pedido que a originou. */
+  const PUSH_RADIUS_KM = 150;
+  const distanceKm = (aLat: number, aLng: number, bLat: number, bLng: number) => {
+    const rad = (d: number) => (d * Math.PI) / 180, dLat = rad(bLat - aLat), dLng = rad(bLng - aLng);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(dLng / 2) ** 2;
+    return 6371 * 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+  };
   const sendPush = async (subs: { endpoint: string; p256dh: string; auth: string }[], msg: { title: string; body: string; url: string; tag?: string }) => {
     if (!cfg.push) return 0;
     let ok = 0;
@@ -440,8 +446,14 @@ Bilhete+` });
     let accountId: string | null = null;
     const bearerTok = bearer(req as Request);
     if (bearerTok) { try { accountId = (await needAccount(req as Request)).id; } catch { /* sem sessão: fica anónima */ } }
-    await db.query(`INSERT INTO push_subscriptions(account_id,endpoint,p256dh,auth,topics) VALUES($1,$2,$3,$4,$5)
-      ON CONFLICT (endpoint) DO UPDATE SET account_id=COALESCE(EXCLUDED.account_id, push_subscriptions.account_id), p256dh=EXCLUDED.p256dh, auth=EXCLUDED.auth, topics=EXCLUDED.topics`, [accountId, sub.endpoint, k.p256dh, k.auth, topics]);
+    // posição aproximada do aparelho (arredondada a ~1 km): só serve para os avisos de novos eventos por zona
+    const loc = req.body?.location;
+    const lat = Number(loc?.lat), lng = Number(loc?.lng);
+    const hasLoc = !!loc && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+    await db.query(`INSERT INTO push_subscriptions(account_id,endpoint,p256dh,auth,topics,lat,lng,located_at) VALUES($1,$2,$3,$4,$5,$6,$7,CASE WHEN $6::float8 IS NULL THEN NULL ELSE now() END)
+      ON CONFLICT (endpoint) DO UPDATE SET account_id=COALESCE(EXCLUDED.account_id, push_subscriptions.account_id), p256dh=EXCLUDED.p256dh, auth=EXCLUDED.auth, topics=EXCLUDED.topics,
+        lat=COALESCE(EXCLUDED.lat, push_subscriptions.lat), lng=COALESCE(EXCLUDED.lng, push_subscriptions.lng), located_at=COALESCE(EXCLUDED.located_at, push_subscriptions.located_at)`,
+      [accountId, sub.endpoint, k.p256dh, k.auth, topics, hasLoc ? Math.round(lat * 100) / 100 : null, hasLoc ? Math.round(lng * 100) / 100 : null]);
     return { ok: true, topics };
   }));
   app.post('/public/push/unsubscribe', h(async (req) => {
@@ -473,8 +485,11 @@ Bilhete+` });
     await db.query(`UPDATE events SET status='PUBLISHED' WHERE id=$1`, [req.params.id]);
     // só na primeira publicação: «há um novo evento» para quem activou as notificações
     if (was !== 'PUBLISHED') pushAsync(async () => {
-      const ev = (await db.query<any>(`SELECT e.name,e.starts_at,e.location,d.subdomain FROM events e LEFT JOIN event_domains d ON d.event_id=e.id WHERE e.id=$1`, [req.params.id])).rows[0];
-      const subs = (await db.query<any>(`SELECT endpoint,p256dh,auth FROM push_subscriptions WHERE 'events' = ANY(topics)`)).rows;
+      const ev = (await db.query<any>(`SELECT e.name,e.starts_at,e.location,e.latitude,e.longitude,d.subdomain FROM events e LEFT JOIN event_domains d ON d.event_id=e.id WHERE e.id=$1`, [req.params.id])).rows[0];
+      // por zona: só aparelhos a até PUSH_RADIUS_KM (150) do local do evento; sem local no mapa ou sem posição do aparelho, não se avisa
+      if (ev.latitude === null || ev.longitude === null) return;
+      const all = (await db.query<any>(`SELECT endpoint,p256dh,auth,lat,lng FROM push_subscriptions WHERE 'events' = ANY(topics) AND lat IS NOT NULL AND lng IS NOT NULL`)).rows;
+      const subs = all.filter((s: any) => distanceKm(Number(ev.latitude), Number(ev.longitude), s.lat, s.lng) <= PUSH_RADIUS_KM);
       await sendPush(subs, { title: 'Novo evento no Bilhete+', body: `${ev.name}${ev.location ? ' · ' + ev.location : ''} · ${new Date(ev.starts_at).toLocaleDateString('pt-MZ', { day: 'numeric', month: 'long' })}`, url: eventAddress(ev.subdomain), tag: 'event-' + req.params.id });
     });
     return { status: 'PUBLISHED' };

@@ -919,20 +919,25 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     expect((await call('GET', '/public/push/config')).body.publicKey).toBe('BPUBLIC-TEST-KEY');
     const sub = (name: string, extra: object = {}, tok?: string) => call('POST', '/public/push/subscribe', { subscription: { endpoint: `https://push.example.test/${name}-endpoint-abcdef`, keys: { p256dh: 'p'.repeat(40), auth: 'a'.repeat(20) } }, ...extra }, tok);
     expect((await call('POST', '/public/push/subscribe', { subscription: { endpoint: 'http://inseguro/x', keys: {} } })).status).toBe(400);
-    expect((await sub('anon')).status).toBe(200);
-    expect((await sub('gone')).status).toBe(200);
+    const maputo = { location: { lat: -25.95, lng: 32.58 } }; // por zona: só se avisa quem está a ≤ 150 km do evento
+    expect((await sub('anon', maputo)).status).toBe(200);
+    expect((await sub('gone', maputo)).status).toBe(200);
+    expect((await sub('longe', { location: { lat: -15.12, lng: 39.27 } })).status).toBe(200); // Nampula: muito longe
+    expect((await sub('semPosicao')).status).toBe(200); // sem posição: não recebe avisos de novos eventos
     expect((await sub('soBilhetes', { topics: ['tickets'] })).status).toBe(200);
     const acc = (await call('POST', '/account/register', { name: 'Push', email: 'push@teste.mz', password: 'pw-push-12345' })).body.token;
-    expect((await sub('conta', {}, acc)).status).toBe(200);
+    expect((await sub('conta', maputo, acc)).status).toBe(200);
     expect((await db.query<any>(`SELECT account_id FROM push_subscriptions WHERE endpoint LIKE '%conta-endpoint%'`)).rows[0].account_id).toBeTruthy(); // ligada à conta
     // primeira publicação: avisa quem quer «novos eventos»; a subscrição morta é apagada; quem só quer bilhetes não recebe
-    const ev = (await call('POST', '/events', { name: 'Festival Novidade', location: 'Maputo', startsAt: '2031-07-01T10:00:00Z', endsAt: '2031-07-01T22:00:00Z' }, S.adminA)).body;
+    const ev = (await call('POST', '/events', { name: 'Festival Novidade', location: 'Maputo', latitude: -25.97, longitude: 32.57, startsAt: '2031-07-01T10:00:00Z', endsAt: '2031-07-01T22:00:00Z' }, S.adminA)).body;
     pushSent.length = 0;
     await call('POST', `/events/${ev.id}/publish`, {}, S.adminA); await drain();
     const got = pushSent.map((x) => x.endpoint);
     expect(got.some((e) => e.includes('anon-endpoint'))).toBe(true);
     expect(got.some((e) => e.includes('conta-endpoint'))).toBe(true);
     expect(got.some((e) => e.includes('soBilhetes'))).toBe(false);
+    expect(got.some((e) => e.includes('longe-endpoint'))).toBe(false); // fora do raio de 150 km
+    expect(got.some((e) => e.includes('semPosicao'))).toBe(false);
     expect((await db.query<any>(`SELECT count(*)::int AS c FROM push_subscriptions WHERE endpoint LIKE '%gone-endpoint%'`)).rows[0].c).toBe(0);
     expect(pushSent[0].msg).toMatchObject({ title: 'Novo evento no Bilhete+', url: expect.stringContaining(ev.subdomain) });
     expect(pushSent[0].msg.body).toContain('Festival Novidade');

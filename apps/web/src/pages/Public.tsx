@@ -1,5 +1,5 @@
 import { locale } from '../i18n';
-import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { accountApi, api, appBack, dt, mt, toMinor } from '../api';
 import type { Config } from '../main';
 import { assetUrl, themeStyle, type Assets, type Theme } from '../theme';
@@ -50,6 +50,8 @@ export function PublicEvent({ slug, cfg }: { slug: string; cfg: Config }) {
   const [err, setErr] = useState<string | false>(false);
   const [qty, setQty] = useState<Record<string, number>>({});
   const [checkout, setCheckout] = useState(false);
+  const checkoutRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (checkout) setTimeout(() => checkoutRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60); }, [checkout]); // ao tocar em Pagar, a confirmação sobe para o ecrã
   const [phone, setPhone] = useState(() => { try { return localStorage.getItem('bp_phone') ?? ''; } catch { return ''; } });
   const { me, refresh, logout } = useAccount();
   const toast = useToast();
@@ -111,8 +113,8 @@ export function PublicEvent({ slug, cfg }: { slug: string; cfg: Config }) {
               {!ended && !checkout && <button className="big wide desktop-only" disabled={!count} onClick={() => setCheckout(true)}>{cta}<Icon n="arrowright" /></button>}
             </div>
           </section>
-          {!ended && checkout && (
-            me === null ? <><AuthPanel onDone={refresh} /><button className="ghost wide" onClick={() => setCheckout(false)}>Voltar</button></> : me === undefined ? <Skeleton rows={2} /> : (
+          {!ended && checkout && (<div ref={checkoutRef} style={{ scrollMarginTop: 72 }}>
+            {me === null ? <><AuthPanel onDone={refresh} /><button className="ghost wide" onClick={() => setCheckout(false)}>Voltar</button></> : me === undefined ? <Skeleton rows={2} /> : (
             <section className="card stack">
               <h2>Confirmar compra</h2>
               <p>A comprar como <b>{me.name}</b><br /><span className="muted small">{me.email}</span></p>
@@ -125,8 +127,8 @@ export function PublicEvent({ slug, cfg }: { slug: string; cfg: Config }) {
               {total > 0n && !cfg.mpesa && <p className="muted small">O pagamento por M-Pesa não está disponível de momento.</p>}
               <button className="ghost wide" onClick={() => setCheckout(false)}>Voltar</button>
               <button type="button" className="ghost sm" onClick={logout}>Não é {me.name.split(' ')[0]}? Sair</button>
-            </section>)
-          )}
+            </section>)}
+          </div>)}
         </aside>
         <div className="pub-main stack">
           {ev.description && <section className="card"><h2 style={{ marginBottom: 8 }}>Sobre o evento</h2><p style={{ whiteSpace: 'pre-line' }}>{ev.description}</p></section>}
@@ -164,8 +166,10 @@ function MpesaPay({ label, start, onDone, resume }: { label: string; start: (pho
     return () => { stop = true; clearInterval(t); };
   }, [charge, onDone]);
   const waiting = !!charge;
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (resume !== undefined) setTimeout(() => box.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <div className="stack">
+    <div className="stack" ref={box}>
       <Field label="Número M-Pesa (Vodacom)"><input type="tel" inputMode="tel" autoComplete="tel-national" placeholder="84 123 4567" value={phone} disabled={waiting} onChange={(e) => setPhone(e.target.value)} /></Field>
       <button className="big wide" disabled={busy || waiting || phone.replace(/\D/g, '').length < 9} onClick={() => run(async () => {
         try { localStorage.setItem('bp_phone', phone); } catch { /* sem armazenamento */ }
