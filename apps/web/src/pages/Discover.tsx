@@ -160,6 +160,7 @@ export default function Discover() {
   const anyFilter = q || cat || when || free;
 
   return (
+    <>
     <div className="map-page with-tabs">
       <div ref={box} className="map-canvas" aria-label="Mapa de eventos" />
       {mapErr && <div className="map-note" role="alert">{mapErr}</div>}
@@ -208,7 +209,8 @@ export default function Discover() {
           {sel && sel.lat !== null && <p className="small muted center" style={{ padding: 8 }}>Direcções: <a href={googleDirections(sel.lat, sel.lng!)} target="_blank" rel="noopener noreferrer">Google Maps</a> · <a href={wazeDirections(sel.lat, sel.lng!)} target="_blank" rel="noopener noreferrer">Waze</a></p>}
         </div>
       </section>
-      <AppTabs current="events" />
     </div>
+      <AppTabs current="events" />
+    </>
   );
 }
