@@ -57,6 +57,22 @@ function Login({ onDone, org, slug, canRegister, area }: { onDone: () => void; o
 }
 
 /** Empresa registada mas ainda não aprovada (ou suspensa): só perfil, documentos e marca. */
+/** Empresa ainda sem aprovação (ou suspensa): a área não abre, só este aviso. */
+function NotApproved({ status, name, onExit }: { status: string; name?: string; onExit: () => void }) {
+  const pending = status === 'PENDING';
+  return (
+    <div className="main" style={{ display: 'grid', placeItems: 'center', minHeight: '70vh', padding: 24 }}>
+      <section className="card" style={{ maxWidth: 460, textAlign: 'center', display: 'grid', gap: 12 }}>
+        <h1 style={{ margin: 0 }}>Empresa não aprovada</h1>
+        <p className="muted" style={{ margin: 0 }}>{pending
+          ? `${name ? name + ' ainda' : 'A sua empresa ainda'} está a aguardar a aprovação da equipa Bilhete+. Quando for aprovada, avisamos por e-mail e esta área abre-se.`
+          : `${name ? name + ' está' : 'A sua empresa está'} sem acesso neste momento. Contacte o suporte Bilhete+.`}</p>
+        <button type="button" className="ghost" onClick={onExit}>Terminar sessão</button>
+      </section>
+    </div>
+  );
+}
+
 function Onboarding({ me, reload }: { me: any; reload: () => void }) {
   const toast = useToast();
   return (
@@ -96,6 +112,7 @@ export function Staff({ orgSlug, area, cfg }: { orgSlug?: string; area?: 'platfo
   useEffect(load, [orgSlug, area]);
   if (me === undefined || (orgSlug && org === undefined)) return <div className="main"><Skeleton /></div>;
   if (!me) return <Login onDone={load} org={org?.name ? org : undefined} slug={orgSlug} canRegister={cfg?.selfRegistration} area={area} />;
+  if (me.role !== 'PLATFORM_ADMIN' && me.orgStatus !== 'ACTIVE' && me.orgStatus !== 'REJECTED') return <NotApproved status={me.orgStatus} name={me.orgName} onExit={() => { setToken(null); setMe(null); }} />;
   if (me.role !== 'PLATFORM_ADMIN' && me.orgStatus !== 'ACTIVE') return <Onboarding me={me} reload={load} />;
   return (
     <>

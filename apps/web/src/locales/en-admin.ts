@@ -28,6 +28,7 @@ export const EN_ADMIN: Record<string, string> = {
   // ---------- lista de bilhetes ----------
   'Por atender': 'Upcoming', 'Eventos passados': 'Past events', 'Sem eventos por atender.': 'No upcoming events.', 'Ainda sem eventos passados.': 'No past events yet.',
   'Carregado': 'Topped up', 'Gasto': 'Spent', 'Saldo': 'Balance', 'Compra': 'Purchase', 'Levantamento': 'Cash-out', 'Ajuste': 'Adjustment', 'Bilhete': 'Ticket',
+  'Empresa não aprovada': 'Company not approved', 'Quando for aprovada, avisamos por e-mail e esta área abre-se.': 'Once approved, we will let you know by e-mail and this area will open.', 'Contacte o suporte Bilhete+.': 'Please contact Bilhete+ support.',
   // ---------- estados ----------
   'Activa': 'Active', 'Publicado': 'Published', 'Pago': 'Paid', 'Confirmado': 'Confirmed', 'Pendente': 'Pending', 'A aguardar pagamento': 'Awaiting payment', 'Utilizado': 'Used', 'Suspensa': 'Suspended', 'Desactivada': 'Disabled', 'Cancelado': 'Cancelled', 'Bloqueado': 'Blocked', 'Encerrado': 'Closed',
   'Titular': 'Holder', 'Estado': 'Status',

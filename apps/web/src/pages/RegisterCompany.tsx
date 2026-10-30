@@ -32,9 +32,10 @@ export function Register() {
   if (done !== null) return (
     <Shell label="[BP/ Registo recebido]" title="Falta pouco.">
       <section className="pp-card">
-        <p className="pp-sub">A sua empresa está <b>a aguardar aprovação</b>. A equipa Bilhete+ vai validar os dados.</p>
-        <p className="pp-sub">Quando for aprovada, enviamos-lhe por e-mail o <b>endereço da área da sua empresa</b>, a partir do qual cria eventos. Até lá não há ligação de acesso: não precisa de fazer mais nada.</p>
-        <a className="pp-btn" href="/events">Ver eventos</a>
+        <p className="pp-sub">A sua empresa está <b>a aguardar aprovação</b>. Só depois de aprovada poderá usar a área da empresa e criar eventos: até lá, ao entrar, verá «Empresa não aprovada».</p>
+        <p className="pp-sub">Este é o endereço da área da sua empresa. <b>Guarde-o</b>: não é divulgado em lado nenhum. Enviámos também por e-mail.</p>
+        <p className="mono" style={{ overflowWrap: 'anywhere' }} data-no-translate>{location.origin}/company/{done}</p>
+        <a className="pp-btn" href={`/company/${done}`}>Ir para a minha empresa</a>
       </section>
     </Shell>
   );
@@ -75,7 +76,7 @@ export function Register() {
           </dl>
           <label className="pp-check"><input type="checkbox" checked={f.acceptTerms} onChange={set('acceptTerms')} /><span>Declaro que os dados são verdadeiros e aceito os termos de utilização da plataforma.</span></label>
           <div className="pp-actions"><button className="pp-btn alt" onClick={() => setStep(1)}>Voltar</button>
-            <button className="pp-btn" disabled={busy || !ready} onClick={() => run(async () => { const r = await api('POST', '/public/register', f); setDone(r.id || 'ok'); })}>{busy ? 'A enviar…' : 'Registar empresa'}</button></div>
+            <button className="pp-btn" disabled={busy || !ready} onClick={() => run(async () => { const r = await api('POST', '/public/register', f); setDone(r.slug || ''); })}>{busy ? 'A enviar…' : 'Registar empresa'}</button></div>
         </div>}
       </section>
       {toast.node}

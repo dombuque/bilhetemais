@@ -1367,10 +1367,13 @@ export function createApp(db: Db, cfg: AppConfig) {
       await queueMail(db, cfg.mailer ?? null, tx, { to: email, organizationId: o.rows[0].id, subject: 'Recebemos o registo da sua empresa — Bilhete+',
         text: `Olá ${str(b.contactName, 'responsável')},
 
-Recebemos o registo de ${str(b.tradeName, 'nome comercial')}. A nossa equipa vai validar os dados. Quando a empresa for aprovada, enviamos-lhe por e-mail o endereço da área da sua equipa: até lá não há ligação de acesso.
+Recebemos o registo de ${str(b.tradeName, 'nome comercial')}. A nossa equipa vai validar os dados e avisamos quando a empresa for aprovada.
+
+Endereço da área da sua equipa (guarde-o): ${cfg.publicUrl ?? ''}/company/${o.rows[0].slug}
+Enquanto a empresa não for aprovada, ao entrar verá «Empresa não aprovada».
 
 Bilhete+` });
-      return { id: o.rows[0].id, status: 'PENDING' }; // a ligação da área da empresa só é enviada depois da aprovação
+      return { id: o.rows[0].id, status: 'PENDING', slug: o.rows[0].slug };
     });
   }));
 
