@@ -80,10 +80,12 @@ function GoogleInApp({ next, onDone }: { next: string; onDone: () => void }) {
     window.open(`${mainUrl()}/account/google/start?next=${encodeURIComponent(next)}&rid=${rid}`, '_blank');
     setWaiting(true);
     const started = Date.now();
-    timer.current = window.setInterval(async () => {
+    const poll = async () => {
       if (Date.now() - started > 5 * 60_000) return stop();
       try { const r = await fetch(`/account/google/poll?rid=${rid}`).then((x) => x.json()); if (r.done) { stop(); setAccountToken(r.token); onDone(); } } catch { /* tenta outra vez */ }
-    }, 1500);
+    };
+    timer.current = window.setInterval(() => { if (Date.now() - started > 5 * 60_000) return stop(); poll(); }, 1500);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && timer.current) poll(); }); // ao voltar à app, verifica logo
   };
   return waiting
     ? <div className="pp-wait"><p className="pp-sub">A aguardar o Google… Entre na janela que abriu e volte à app.</p><button type="button" className="pp-link" onClick={stop}>Cancelar</button></div>
@@ -92,10 +94,10 @@ function GoogleInApp({ next, onDone }: { next: string; onDone: () => void }) {
 
 /** Página aberta no navegador depois de o Google terminar uma entrada iniciada na app. */
 export function AccountDone() {
+  // a sessão já foi entregue à app: esta janela fecha-se sozinha; se o navegador não deixar, fica só um aviso mínimo
+  useEffect(() => { const t = setTimeout(() => window.close(), 150); return () => clearTimeout(t); }, []);
   return (
-    <div className="pp"><header className="pp-top"><a href="/" aria-label="Início"><img src="/logo-dark.svg" alt="Bilhete+" /></a></header>
-      <section className="pp-hero"><span className="pp-label">[BP/ Entrada]</span><h1>Entrada concluída</h1></section>
-      <main className="pp-main"><section className="pp-card pp-wide"><p className="pp-sub">Já pode fechar esta janela e voltar à app Bilhete+: a sua sessão já está iniciada lá.</p></section></main></div>
+    <div className="pp done-min"><p>✓ Sessão iniciada. Volte à app Bilhete+.</p><button type="button" className="pp-btn" onClick={() => window.close()}>Fechar</button></div>
   );
 }
 

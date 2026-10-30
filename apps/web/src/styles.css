@@ -453,3 +453,5 @@ html.vt #root > *:first-child { animation: none; }
 .splash.lang-first { flex-direction: column; gap: 12px; align-content: center; justify-items: center; padding: 24px; text-align: center; color: #fff; display: flex; align-items: center; justify-content: center; }
 .splash.lang-first h1 { font: 800 1.8rem var(--font-display); margin: 8px 0 0; } .splash.lang-first p { color: #c9c6e2; margin: 0 0 14px; }
 .splash.lang-first button { width: min(280px, 100%); min-height: 52px; font-size: 1.05rem; background: #fff; color: #0b0820; border-color: #fff; } .splash.lang-first button + button { background: transparent; color: #fff; border-color: rgb(255 255 255 / .5); }
+
+.done-min { min-height: 100vh; display: grid; place-content: center; gap: 16px; text-align: center; padding: 24px; background: #0b0820; color: #fff; } .done-min p { font: 700 1.1rem var(--font-display); margin: 0; } .done-min button { justify-self: center; min-width: 160px; }
