@@ -1150,6 +1150,42 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     expect(mail.body).toContain('/t/' + paid.tickets[0].token);
   });
 
+  it('partilha de bilhetes: apelido, link de uso único, o código antigo deixa de valer, só antes de usar', async () => {
+    const ev = (await call('POST', '/events', { name: 'Festival Partilha', location: 'Maputo', startsAt: '2032-01-01T10:00:00Z', endsAt: '2032-01-01T22:00:00Z' }, S.adminA)).body;
+    await call('POST', `/events/${ev.id}/publish`, {}, S.adminA);
+    const tt = (await call('POST', `/events/${ev.id}/ticket-types`, { name: 'Geral', priceMinor: MT(50), quantity: 5 }, S.adminA)).body.id;
+    const a1 = (await call('POST', '/account/register', { name: 'Dona', email: 'dona@teste.mz', password: 'pw-dona-12345' })).body.token;
+    const a2 = (await call('POST', '/account/register', { name: 'Amigo', email: 'amigo@teste.mz', password: 'pw-amigo-12345' })).body.token;
+    const o = await buyTicket(ev.subdomain, { items: [{ ticketTypeId: tt, qty: 1 }] }, a1);
+    await webhook({ id: 'evt-share-' + o.body.orderId, type: 'payment.succeeded', kind: 'ORDER', ref: o.body.orderId }); await appInst.drain();
+    let list = (await call('GET', '/account/orders', undefined, a1)).body;
+    const t0 = list[0].tickets[0];
+    expect((await call('PATCH', `/account/tickets/${t0.id}`, { nickname: 'Ana' }, a1)).status).toBe(200);
+    expect((await call('PATCH', `/account/tickets/${t0.id}`, { nickname: 'x' }, a2)).status).toBe(404); // só quem o tem
+    const sh = await call('POST', `/account/tickets/${t0.id}/share`, {}, a1);
+    expect(sh.status).toBe(200);
+    const code = sh.body.link.split('/claim/')[1];
+    expect((await call('GET', `/account/claim/${code}`)).body.event).toBe('Festival Partilha');
+    expect((await call('POST', `/account/claim/${code}`, {}, a1)).status).toBe(409); // já é seu
+    expect((await call('POST', `/account/claim/${code}`, {}, a2)).status).toBe(200);
+    expect((await call('POST', `/account/claim/${code}`, {}, a2)).status).toBe(404); // uso único
+    list = (await call('GET', '/account/orders', undefined, a1)).body;
+    expect(list[0].tickets[0].token).toBeNull(); // já não funciona para quem partilhou
+    expect(list[0].tickets[0].share).toMatchObject({ claimed: true, to: 'Amigo' });
+    const his = (await call('GET', '/account/orders', undefined, a2)).body;
+    expect(his[0].shared).toBe(true);
+    const newTok = his[0].tickets[0].token;
+    expect(newTok).toBeTruthy();
+    expect((await call('GET', `/public/tickets/${newTok}`)).status).toBe(200);
+    expect((await call('GET', `/public/tickets/${t0.token}`)).status).toBe(404); // o código antigo morreu
+    expect((await call('POST', `/account/tickets/${t0.id}/unshare`, {}, a1)).status).toBe(200); // retirar acesso: volta com código novo
+    list = (await call('GET', '/account/orders', undefined, a1)).body;
+    expect(list[0].tickets[0].token).toBeTruthy();
+    expect((await call('GET', `/public/tickets/${newTok}`)).status).toBe(404);
+    await db.query(`UPDATE tickets SET status='USED' WHERE id=$1`, [t0.id]);
+    expect((await call('POST', `/account/tickets/${t0.id}/share`, {}, a1)).status).toBe(409); // depois de usado já não se partilha
+  });
+
   it('auditoria: operações sensíveis ficam registadas', async () => {
     const r = await db.query<any>(`SELECT DISTINCT action FROM audit_logs`);
     const actions = r.rows.map((x: any) => x.action);

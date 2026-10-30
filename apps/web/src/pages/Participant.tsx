@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { accountApi, accountToken, dt, mainUrl, mt, onEventHost, setAccountToken } from '../api';
+import { accountApi, accountToken, dt, goTo, mainUrl, mt, onEventHost, setAccountToken } from '../api';
 import { Empty, Icon, LangSwitch, Pill, Skeleton, useAction, useToast } from '../ui';
 import { AppTabs } from '../AppTabs';
 import { InstallButton, isStandalone, useInstall } from '../install';
@@ -143,22 +143,53 @@ const MV: Record<string, string> = { TOPUP: 'Carregamento', PAYMENT: 'Compra', R
 const TICKET_STATE: Record<string, string> = { ISSUED: 'Válido', USED: 'Já utilizado', BLOCKED: 'Bloqueado', REVOKED: 'Cancelado', PENDING: 'A aguardar pagamento' };
 
 /** Um bilhete: tipo, estado, saldo da carteira, o que já gastou e o detalhe dos consumos. */
-function TicketCard({ t, n, total }: { t: any; n: number; total: number }) {
+function TicketCard({ t, n, total, shared, reload }: { t: any; n: number; total: number; shared?: boolean; reload: () => void }) {
+  const toast = useToast();
+  const { busy, run } = useAction(toast.show);
+  const [editing, setEditing] = useState(false);
+  const [nick, setNick] = useState(t.nickname ?? '');
+  const [link, setLink] = useState<string | null>(null);
+  const gone = !!t.share?.claimed && !shared; // partilhado e aceite: já não funciona para quem o partilhou
   const bad = t.status === 'BLOCKED' || t.status === 'REVOKED';
   const spent = BigInt(t.spentMinor ?? 0), topup = BigInt(t.topupMinor ?? 0);
+  const untouched = t.status === 'ISSUED' && (t.usage?.length ?? 0) === 0;
+  const doShare = () => run(async () => {
+    const r = await accountApi('POST', `/account/tickets/${t.id}/share`, {});
+    setLink(r.link);
+    const text = `${t.nickname ? t.nickname + ', t' : 'T'}em um bilhete no Bilhete+. Abra este link para o receber na sua app (válido 7 dias, uso único): ${r.link}`;
+    if (typeof navigator.share === 'function') { try { await navigator.share({ title: 'Bilhete+', text, url: r.link }); } catch { /* cancelado: o link continua abaixo */ } }
+    reload();
+  });
   return (
-    <div className={'pp-tk' + (bad ? ' bad' : '')}>
+    <div className={'pp-tk' + (bad ? ' bad' : '') + (gone ? ' gone' : '')}>
       <div className="pp-tk-head">
-        <b>{t.typeName ?? 'Bilhete'}{total > 1 ? ` · ${n}/${total}` : ''}</b>
-        <span className={'pp-tk-st st-' + t.status}>{TICKET_STATE[t.status] ?? t.status}</span>
+        <b>{t.nickname ? `${t.nickname} · ` : ''}{t.typeName ?? 'Bilhete'}{total > 1 ? ` · ${n}/${total}` : ''}</b>
+        <span className={'pp-tk-st st-' + (gone ? 'SHARED' : t.status)}>{gone ? 'Partilhado' : TICKET_STATE[t.status] ?? t.status}</span>
       </div>
+      {!shared && !gone && (editing
+        ? <div className="pp-tk-nick"><input value={nick} maxLength={40} placeholder="Apelido (ex.: Ana, Pai…)" aria-label="Apelido do bilhete" onChange={(e) => setNick(e.target.value)} autoFocus />
+            <button type="button" className="pp-link" disabled={busy} onClick={() => run(async () => { await accountApi('PATCH', `/account/tickets/${t.id}`, { nickname: nick }); setEditing(false); reload(); }, 'Apelido guardado')}>Guardar</button>
+            <button type="button" className="pp-link" onClick={() => { setEditing(false); setNick(t.nickname ?? ''); }}>Cancelar</button></div>
+        : <button type="button" className="pp-link pp-tk-edit" onClick={() => setEditing(true)}>{t.nickname ? 'Mudar apelido' : 'Dar um apelido'}</button>)}
+      {gone && <div className="pp-tk-gone"><b>Partilhado com {t.share.to ?? 'outra pessoa'}.</b><span>Este bilhete já não funciona para si: o código passou para a conta dela.</span>
+        {untouched && <button type="button" className="pp-link" disabled={busy} onClick={() => run(async () => { await accountApi('POST', `/account/tickets/${t.id}/unshare`, {}); reload(); }, 'Acesso retirado: o bilhete voltou para si')}>Retirar acesso</button>}</div>}
       {bad && t.reason && <p className="pp-tk-reason">Motivo: {t.reason}</p>}
-      {t.hasWallet && !bad && <div className="pp-tk-bal">
+      {!gone && t.hasWallet && !bad && <div className="pp-tk-bal">
         <div><small>Saldo</small><strong>{mt(t.balanceMinor)}</strong></div>
         <div><small>Carregado</small><span>{mt(topup)}</span></div>
         <div><small>Gasto</small><span>{mt(spent)}</span></div>
       </div>}
-      <a className="pp-btn alt" href={`/t/${t.token}`}><Icon n="ticket" />Abrir bilhete (QR{t.hasWallet ? ' e carteira' : ''})</a>
+      {!gone && t.token && <a className="pp-btn alt" href={`/t/${t.token}`}><Icon n="ticket" />Abrir bilhete (QR{t.hasWallet ? ' e carteira' : ''})</a>}
+      {!shared && !gone && untouched && (
+        t.share && !t.share.claimed
+          ? <div className="pp-tk-gone"><b>Link de partilha gerado.</b><span>Ainda ninguém o aceitou. Pode gerar outro ou cancelar.</span>
+              <span className="inline"><button type="button" className="pp-link" disabled={busy} onClick={doShare}>Gerar outro link</button><button type="button" className="pp-link" disabled={busy} onClick={() => run(async () => { await accountApi('POST', `/account/tickets/${t.id}/unshare`, {}); setLink(null); reload(); }, 'Partilha cancelada')}>Cancelar partilha</button></span></div>
+          : <button type="button" className="pp-btn alt" disabled={busy} onClick={doShare}><Icon n="users" />Partilhar este bilhete</button>)}
+      {link && <div className="pp-tk-gone"><b>Link para enviar:</b><span className="mono" style={{ overflowWrap: 'anywhere' }}>{link}</span>
+        <span className="inline"><button type="button" className="pp-link" onClick={() => { navigator.clipboard?.writeText(link); toast.show('Link copiado'); }}>Copiar</button>
+          <a className="pp-link" href={`https://wa.me/?text=${encodeURIComponent('Abra este link para receber o seu bilhete no Bilhete+: ' + link)}`} target="_blank" rel="noopener noreferrer">WhatsApp</a></span>
+        <small>Quando a pessoa aceitar, o bilhete passa para a conta dela e deixa de funcionar para si. Só se pode partilhar antes de ser utilizado.</small></div>}
+      {toast.node}
       {t.usage?.length > 0 && <details className="pp-tk-use"><summary>Consumos e movimentos ({t.usage.length})</summary>
         <ul>{t.usage.map((u: any) => {
           const pos = BigInt(u.amount_minor) > 0n;
@@ -173,7 +204,7 @@ function TicketCard({ t, n, total }: { t: any; n: number; total: number }) {
 }
 
 /** Bilhetes por prioridade: «Próximos» (por pagar primeiro, depois o evento mais próximo) e «Passados» (o mais recente primeiro). */
-function TicketTabs({ orders }: { orders: any[] }) {
+function TicketTabs({ orders, reload }: { orders: any[]; reload: () => void }) {
   const next = orders.filter((o) => !o.past).sort((a, b) => (a.status === 'PENDING_PAYMENT' ? 0 : 1) - (b.status === 'PENDING_PAYMENT' ? 0 : 1) || +new Date(a.starts_at) - +new Date(b.starts_at));
   const past = orders.filter((o) => o.past).sort((a, b) => +new Date(b.starts_at) - +new Date(a.starts_at));
   const [tab, setTab] = useState<'next' | 'past'>(next.length === 0 && past.length > 0 ? 'past' : 'next');
@@ -184,13 +215,13 @@ function TicketTabs({ orders }: { orders: any[] }) {
         <button type="button" role="tab" aria-selected={tab === 'past'} className={tab === 'past' ? 'on' : ''} onClick={() => setTab('past')}>Passados<span>{past.length}</span></button>
       </div>
       {tab === 'next'
-        ? <OrderGroup items={next} empty="Sem eventos próximos. Veja os eventos e escolha o seu." />
-        : <OrderGroup items={past} empty="Ainda sem eventos passados." past />}
+        ? <OrderGroup items={next} empty="Sem eventos próximos. Veja os eventos e escolha o seu." reload={reload} />
+        : <OrderGroup items={past} empty="Ainda sem eventos passados." past reload={reload} />}
     </>
   );
 }
 
-function OrderGroup({ items, empty, past }: { items: any[]; empty: string; past?: boolean }) {
+function OrderGroup({ items, empty, past, reload }: { items: any[]; empty: string; past?: boolean; reload: () => void }) {
   return (
     <section className={'pp-group' + (past ? ' past' : '')}>
       {items.length === 0 ? <p className="pp-sub">{empty}</p> : <div className="pp-orders">{items.map((o) => (
@@ -202,12 +233,40 @@ function OrderGroup({ items, empty, past }: { items: any[]; empty: string; past?
           </div>
           <div className="pp-perf" aria-hidden="true" />
           <div className="pp-ticket-bot">
-            <div className="between"><Pill s={o.status} /><b>{BigInt(o.total_minor) === 0n ? 'Grátis' : mt(o.total_minor)}</b></div>
+            {o.shared
+              ? <div className="between"><span className="pp-tk-st st-SHARED">Partilhado consigo</span><small className="muted">por {o.from}</small></div>
+              : <div className="between"><Pill s={o.status} /><b>{BigInt(o.total_minor) === 0n ? 'Grátis' : mt(o.total_minor)}</b></div>}
             {o.status === 'PENDING_PAYMENT' && !past && <a className="pp-btn" href={`/o/${o.id}`}>Pagar esta encomenda</a>}
-            {o.tickets.map((t: any, i: number) => <TicketCard key={t.id} t={t} n={i + 1} total={o.tickets.length} />)}
+            {o.tickets.map((t: any, i: number) => <TicketCard key={t.id} t={t} n={i + 1} total={o.tickets.length} shared={!!o.shared} reload={reload} />)}
           </div>
         </article>))}</div>}
     </section>
+  );
+}
+
+/** Link de partilha: mostra o evento e quem partilhou; depois de entrar, aceita e o bilhete fica na conta. */
+export function ClaimTicket({ code }: { code: string }) {
+  const [info, setInfo] = useState<any>(undefined);
+  const { me, refresh } = useAccount();
+  const toast = useToast();
+  const { busy, run } = useAction(toast.show);
+  useEffect(() => { fetch(`/account/claim/${code}`).then((r) => r.json()).then((j) => setInfo(j.error ? null : j)).catch(() => setInfo(null)); }, [code]);
+  const accept = () => run(async () => { await accountApi('POST', `/account/claim/${code}`, {}); goTo('/account'); }, 'Bilhete adicionado à sua conta');
+  return (
+    <div className="pp"><header className="pp-top"><img src="/logo-dark.svg" alt="Bilhete+" /><span className="pp-top-r"><LangSwitch className="on-dark" /></span></header>
+      <section className="pp-hero"><span className="pp-label">[BP/ Bilhete partilhado]</span><h1>{info ? 'Recebeu um bilhete' : 'Bilhete partilhado'}</h1></section>
+      <main className="pp-main">
+        {info === undefined ? <Skeleton rows={3} /> : info === null
+          ? <section className="pp-card pp-wide"><p className="pp-sub">Este link já foi usado ou expirou. Peça a quem o partilhou que gere um novo.</p><a className="pp-btn" href="/events">Ver eventos</a></section>
+          : <>
+            <section className="pp-card pp-wide"><p className="pp-sub"><b>{info.from}</b> partilhou consigo um bilhete para:</p>
+              <h2 className="pp-h" style={{ margin: 0 }}>{info.event}</h2><p className="pp-sub">{dt(info.startsAt)}{info.location ? ` · ${info.location}` : ''}</p>
+              {me ? <button type="button" className="pp-btn" disabled={busy} onClick={accept}>{busy ? 'A adicionar…' : 'Aceitar bilhete'}</button> : null}
+            </section>
+            {me === null && <AuthPanel onDone={refresh} next={'/claim/' + code} intro="Entre para receber este bilhete na sua conta." />}
+            {me === undefined && <Skeleton rows={2} />}
+          </>}
+      </main>{toast.node}</div>
   );
 }
 
@@ -252,7 +311,7 @@ export function AccountPage({ view = 'tickets' }: { view?: 'tickets' | 'profile'
         {urlError && GOOGLE_ERRORS[urlError] && !me && <p className="pp-alert" role="alert">{GOOGLE_ERRORS[urlError]}</p>}
         {me === undefined ? <Skeleton rows={3} /> : me === null ? <AuthPanel onDone={refresh} next={location.pathname} intro="Entre para ver os seus bilhetes e o seu perfil." /> : <>
           {view === 'tickets' && (!orders ? <Skeleton rows={3} /> : orders.length === 0 ? <div className="pp-card"><Empty icon="ticket">Ainda não comprou bilhetes. <a href="/events">Ver eventos</a></Empty></div> : <>
-            <TicketTabs orders={orders} />
+            <TicketTabs orders={orders} reload={load} />
           </>)}
 
           {view === 'profile' && <div className="pp-list">

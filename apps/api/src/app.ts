@@ -81,7 +81,7 @@ const out = (o: any): any => JSON.parse(JSON.stringify(o, (_k, v) => (typeof v =
 
 export function createApp(db: Db, cfg: AppConfig) {
   const wallet = new WalletService(db);
-  const tokenFor = (id: string) => createHmac('sha256', cfg.tokenSecret).update('ticket:' + id).digest('base64url').slice(0, 22);
+  const tokenFor = (id: string, ver = 0) => createHmac('sha256', cfg.tokenSecret).update('ticket:' + id + (ver > 0 ? ':' + ver : '')).digest('base64url').slice(0, 22); // ver > 0: bilhete partilhado (código renovado)
   const audit = (tx: Tx, user: User | undefined, action: string, entity?: string, id?: string, detail?: unknown) =>
     tx.query('INSERT INTO audit_logs(user_id,action,entity,entity_id,detail) VALUES($1,$2,$3,$4,$5)',
       [user?.id ?? null, action, entity ?? null, id ?? null, JSON.stringify(out(detail ?? {}))]);
@@ -588,8 +588,8 @@ Bilhete+` });
     return r.rows[0] as { id: string; status: string } | undefined;
   };
   const orderTickets = async (tx: Tx, orderId: string) => {
-    const r = await tx.query<any>(`SELECT id,format,status,ticket_type_id,short_code AS "shortCode" FROM tickets WHERE order_id=$1 ORDER BY created_at,id`, [orderId]);
-    return r.rows.map((t: any) => ({ ...t, token: t.status === 'PENDING' ? null : tokenFor(t.id), shortCode: t.status === 'PENDING' ? null : t.shortCode }));
+    const r = await tx.query<any>(`SELECT id,format,status,ticket_type_id,short_code AS "shortCode",token_version AS ver FROM tickets WHERE order_id=$1 ORDER BY created_at,id`, [orderId]);
+    return r.rows.map((t: any) => ({ ...t, token: t.status === 'PENDING' ? null : tokenFor(t.id, t.ver), shortCode: t.status === 'PENDING' ? null : t.shortCode }));
   };
 
   // ---------- público (participante) ----------
@@ -852,29 +852,128 @@ Bilhete+` });
   }));
   /** "Os meus bilhetes": encomendas da conta, com os links dos bilhetes já emitidos. */
   /** Encomendas da conta, com o estado do evento (por atender / passado) e, por bilhete: tipo, saldo da carteira, total gasto e consumos (comerciante, itens). */
+  /** Um bilhete visto pela conta: tipo, estado, saldo da carteira, total gasto, consumos, apelido e partilha. */
+  const accountTicket = async (t: { id: string; token: string; status: string; shortCode: string | null }, viewerId: string, recipient = false) => {
+    const row = (await db.query<any>(`SELECT t.wallet_id,t.status_reason,t.nickname,tt.name AS type_name FROM tickets t LEFT JOIN ticket_types tt ON tt.id=t.ticket_type_id WHERE t.id=$1`, [t.id])).rows[0] ?? {};
+    let balanceMinor: string | null = null, spentMinor = '0', topupMinor = '0', usage: any[] = [];
+    if (row.wallet_id) {
+      balanceMinor = (await wallet.balanceOf(row.wallet_id)).toString();
+      const sums = (await db.query<any>(`SELECT coalesce(sum(-amount_minor) FILTER (WHERE type='PAYMENT'),0) AS spent, coalesce(sum(amount_minor) FILTER (WHERE type='REFUND'),0) AS refunded, coalesce(sum(amount_minor) FILTER (WHERE type='TOPUP'),0) AS topup FROM wallet_ledger_entries WHERE wallet_id=$1`, [row.wallet_id])).rows[0];
+      spentMinor = (BigInt(sums.spent) - BigInt(sums.refunded)).toString(); topupMinor = String(sums.topup);
+      usage = (await db.query<any>(`SELECT l.id,l.type,l.amount_minor,l.created_at,m.name AS merchant,ms.items
+          FROM wallet_ledger_entries l LEFT JOIN merchants m ON m.id=l.merchant_id LEFT JOIN merchant_sales ms ON ms.ledger_entry_id=l.id
+         WHERE l.wallet_id=$1 ORDER BY l.created_at DESC,l.id LIMIT 30`, [row.wallet_id])).rows;
+    }
+    const sh = (await db.query<any>(`SELECT s.id,s.claimed_at,a.name AS to_name FROM ticket_shares s LEFT JOIN accounts a ON a.id=s.to_account_id WHERE s.ticket_id=$1 AND s.revoked_at IS NULL ORDER BY s.created_at DESC LIMIT 1`, [t.id])).rows[0];
+    return {
+      // partilhado e aceite: o bilhete deixou de funcionar para quem o partilhou (o código foi renovado), por isso já não se mostra
+      id: t.id, token: sh?.claimed_at && !recipient ? null : t.token, status: t.status, shortCode: sh?.claimed_at && !recipient ? null : t.shortCode, typeName: row.type_name ?? null, nickname: row.nickname ?? null,
+      reason: t.status === 'BLOCKED' || t.status === 'REVOKED' ? row.status_reason ?? null : null,
+      hasWallet: !!row.wallet_id, balanceMinor, spentMinor, topupMinor, usage,
+      share: sh ? { claimed: !!sh.claimed_at, to: sh.to_name ?? null } : null, viewer: viewerId,
+    };
+  };
+  /** Encomendas da conta (estado do evento: por atender / passado) e, por evento, os bilhetes que outras pessoas partilharam com ela. */
   app.get('/account/orders', h(async (req) => {
     const a = await needAccount(req as Request);
     const os = (await db.query<any>(`SELECT o.id,o.status,o.total_minor,o.created_at,e.name AS event,e.starts_at,e.ends_at,e.location,d.subdomain,
           (coalesce(e.ends_at, e.starts_at + interval '12 hours') < now()) AS past
-        FROM ticket_orders o JOIN events e ON e.id=o.event_id LEFT JOIN event_domains d ON d.event_id=e.id WHERE o.account_id=$1 ORDER BY e.starts_at DESC, o.created_at DESC LIMIT 100`, [a.id])).rows;
+        FROM ticket_orders o JOIN events e ON e.id=o.event_id LEFT JOIN event_domains d ON d.event_id=o.event_id WHERE o.account_id=$1 ORDER BY e.starts_at DESC, o.created_at DESC LIMIT 100`, [a.id])).rows;
     for (const o of os) {
       const ts = (await orderTickets(db, o.id)).filter((t: any) => t.token);
       o.tickets = [];
-      for (const t of ts) {
-        const row = (await db.query<any>(`SELECT t.wallet_id,t.status_reason,tt.name AS type_name,tt.kind FROM tickets t LEFT JOIN ticket_types tt ON tt.id=t.ticket_type_id WHERE t.id=$1`, [t.id])).rows[0] ?? {};
-        let balanceMinor: string | null = null, spentMinor = '0', topupMinor = '0', usage: any[] = [];
-        if (row.wallet_id) {
-          balanceMinor = (await wallet.balanceOf(row.wallet_id)).toString();
-          const sums = (await db.query<any>(`SELECT coalesce(sum(-amount_minor) FILTER (WHERE type='PAYMENT'),0) AS spent, coalesce(sum(amount_minor) FILTER (WHERE type='REFUND'),0) AS refunded, coalesce(sum(amount_minor) FILTER (WHERE type='TOPUP'),0) AS topup FROM wallet_ledger_entries WHERE wallet_id=$1`, [row.wallet_id])).rows[0];
-          spentMinor = (BigInt(sums.spent) - BigInt(sums.refunded)).toString(); topupMinor = String(sums.topup);
-          usage = (await db.query<any>(`SELECT l.id,l.type,l.amount_minor,l.created_at,m.name AS merchant,ms.items
-              FROM wallet_ledger_entries l LEFT JOIN merchants m ON m.id=l.merchant_id LEFT JOIN merchant_sales ms ON ms.ledger_entry_id=l.id
-             WHERE l.wallet_id=$1 ORDER BY l.created_at DESC,l.id LIMIT 30`, [row.wallet_id])).rows;
-        }
-        o.tickets.push({ id: t.id, token: t.token, status: t.status, shortCode: t.shortCode, typeName: row.type_name ?? null, reason: t.status === 'BLOCKED' || t.status === 'REVOKED' ? row.status_reason ?? null : null, hasWallet: !!row.wallet_id, balanceMinor, spentMinor, topupMinor, usage });
-      }
+      for (const t of ts) o.tickets.push(await accountTicket(t, a.id));
     }
+    // bilhetes partilhados comigo, agrupados por evento
+    const sharedRows = (await db.query<any>(`SELECT t.id,t.status,t.short_code AS "shortCode",t.token_version AS ver,e.id AS event_id,e.name AS event,e.starts_at,e.ends_at,e.location,fa.name AS from_name,
+          (coalesce(e.ends_at, e.starts_at + interval '12 hours') < now()) AS past
+        FROM ticket_shares s JOIN tickets t ON t.id=s.ticket_id JOIN events e ON e.id=t.event_id JOIN accounts fa ON fa.id=s.from_account_id
+       WHERE s.to_account_id=$1 AND s.revoked_at IS NULL AND t.status IN ('ISSUED','USED','BLOCKED','REVOKED') ORDER BY e.starts_at DESC, s.claimed_at DESC`, [a.id])).rows;
+    const byEvent = new Map<string, any>();
+    for (const r of sharedRows) {
+      let o = byEvent.get(r.event_id);
+      if (!o) { o = { id: 'shared-' + r.event_id, shared: true, status: 'PAID', total_minor: '0', event: r.event, starts_at: r.starts_at, ends_at: r.ends_at, location: r.location, past: r.past, tickets: [], fromNames: new Set<string>() }; byEvent.set(r.event_id, o); }
+      o.fromNames.add(r.from_name);
+      o.tickets.push(await accountTicket({ id: r.id, token: tokenFor(r.id, r.ver), status: r.status, shortCode: r.shortCode }, a.id, true));
+    }
+    for (const o of byEvent.values()) { o.from = [...o.fromNames].join(', '); delete o.fromNames; os.push(o); }
     return os;
+  }));
+  /** Renova o código do bilhete (QR, link, carteira e código curto): o anterior deixa de funcionar em todo o lado. */
+  const rotateTicket = async (tx: Tx, ticketId: string) => {
+    const t = (await tx.query<any>(`SELECT token_hash,token_version,event_id FROM tickets WHERE id=$1 FOR UPDATE`, [ticketId])).rows[0];
+    const ver = Number(t.token_version) + 1, fresh = hashToken(tokenFor(ticketId, ver));
+    await tx.query(`UPDATE tickets SET token_version=$2, token_hash=$3, short_code=$4 WHERE id=$1`, [ticketId, ver, fresh, await freshShortCode(tx, t.event_id)]);
+    await tx.query(`UPDATE wallet_credentials SET token_hash=$2 WHERE token_hash=$1`, [t.token_hash, fresh]);
+  };
+  /** Só se partilha (ou devolve) um bilhete por usar: nenhuma entrada na portaria nem operações na carteira (carregamentos, consumos, devoluções). */
+  const ticketUntouched = async (tx: Tx, ticketId: string) => {
+    const t = (await tx.query<any>(`SELECT status,wallet_id FROM tickets WHERE id=$1`, [ticketId])).rows[0];
+    if (!t || t.status !== 'ISSUED') return false;
+    if (!t.wallet_id) return true;
+    return (await tx.query<any>(`SELECT 1 FROM wallet_ledger_entries WHERE wallet_id=$1 LIMIT 1`, [t.wallet_id])).rows.length === 0;
+  };
+  /** O bilhete é de uma encomenda desta conta? */
+  const ownTicket = async (accountId: string, ticketId: string) => {
+    if (!/^[0-9a-f-]{36}$/.test(ticketId)) throw new HttpError(404, 'bilhete não encontrado');
+    const r = (await db.query<any>(`SELECT t.id,t.status FROM tickets t JOIN ticket_orders o ON o.id=t.order_id WHERE t.id=$1 AND o.account_id=$2`, [ticketId, accountId])).rows[0];
+    if (!r) throw new HttpError(404, 'bilhete não encontrado');
+    return r as { id: string; status: string };
+  };
+  /** Apelido de cada bilhete («Ana», «Pai»…), só visível a quem o tem na conta. */
+  app.patch('/account/tickets/:id', h(async (req) => {
+    const a = await needAccount(req as Request);
+    const t = await ownTicket(a.id, req.params.id);
+    const nick = typeof req.body?.nickname === 'string' ? req.body.nickname.trim().slice(0, 40) : '';
+    await db.query('UPDATE tickets SET nickname=$2 WHERE id=$1', [t.id, nick || null]);
+    return { id: t.id, nickname: nick || null };
+  }));
+  /** Partilhar um bilhete: gera um link de uso único; quem o abrir e entrar na sua conta fica com o bilhete na app. */
+  app.post('/account/tickets/:id/share', h(async (req) => {
+    const a = await needAccount(req as Request);
+    const t = await ownTicket(a.id, req.params.id);
+    if (!(await ticketUntouched(db, t.id))) throw new HttpError(409, 'este bilhete já foi utilizado (entrada ou operações na carteira): só se partilham bilhetes por usar');
+    const active = (await db.query<any>(`SELECT claimed_at FROM ticket_shares WHERE ticket_id=$1 AND revoked_at IS NULL`, [t.id])).rows[0];
+    if (active?.claimed_at) throw new HttpError(409, 'este bilhete já foi partilhado: retire o acesso primeiro');
+    await db.query(`UPDATE ticket_shares SET revoked_at=now() WHERE ticket_id=$1 AND revoked_at IS NULL`, [t.id]); // link anterior deixa de valer
+    const code = randomBytes(18).toString('base64url');
+    await db.query(`INSERT INTO ticket_shares(ticket_id,from_account_id,token_hash,expires_at) VALUES($1,$2,$3,now() + interval '7 days')`, [t.id, a.id, hashToken(code)]);
+    await audit(db, undefined, 'ticket.share', 'ticket', t.id, { by: a.id });
+    return { link: `${cfg.publicUrl ?? ''}/claim/${code}`, expiresInDays: 7 };
+  }));
+  /** Retira o acesso dado a outra pessoa (ou cancela um link ainda por usar). */
+  app.post('/account/tickets/:id/unshare', h(async (req) => {
+    const a = await needAccount(req as Request);
+    const t = await ownTicket(a.id, req.params.id);
+    await db.transaction(async (tx) => {
+      const was = (await tx.query<any>(`SELECT claimed_at FROM ticket_shares WHERE ticket_id=$1 AND revoked_at IS NULL FOR UPDATE`, [t.id])).rows[0];
+      if (was?.claimed_at && !(await ticketUntouched(tx, t.id))) throw new HttpError(409, 'a outra pessoa já utilizou este bilhete: já não pode ser devolvido');
+      await tx.query(`UPDATE ticket_shares SET revoked_at=now() WHERE ticket_id=$1 AND revoked_at IS NULL`, [t.id]);
+      if (was?.claimed_at) await rotateTicket(tx, t.id); // volta para quem o partilhou, com código novo (o da outra pessoa deixa de valer)
+    });
+    await audit(db, undefined, 'ticket.unshare', 'ticket', t.id, { by: a.id });
+    return { ok: true };
+  }));
+  /** Pré-visualização do link de partilha (sem sessão): evento e quem partilha. */
+  app.get('/account/claim/:code', h(async (req) => {
+    const r = (await db.query<any>(`SELECT e.name AS event,e.starts_at,e.location,fa.name AS from_name,s.claimed_at FROM ticket_shares s JOIN tickets t ON t.id=s.ticket_id JOIN events e ON e.id=t.event_id JOIN accounts fa ON fa.id=s.from_account_id
+        WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>now()`, [hashToken(req.params.code)])).rows[0];
+    if (!r || r.claimed_at) throw new HttpError(404, 'este link já foi usado ou expirou');
+    return { event: r.event, startsAt: r.starts_at, location: r.location, from: r.from_name };
+  }));
+  /** Aceitar o bilhete partilhado: fica na conta de quem aceita. Uso único. */
+  app.post('/account/claim/:code', h(async (req) => {
+    const a = await needAccount(req as Request);
+    return db.transaction(async (tx) => {
+      const s = (await tx.query<any>(`SELECT s.id,s.ticket_id,s.from_account_id FROM ticket_shares s WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.claimed_at IS NULL AND s.expires_at>now() FOR UPDATE`, [hashToken(req.params.code)])).rows[0];
+      if (!s) throw new HttpError(404, 'este link já foi usado ou expirou');
+      if (s.from_account_id === a.id) throw new HttpError(409, 'este bilhete já é seu');
+      if (!(await ticketUntouched(tx, s.ticket_id))) throw new HttpError(409, 'este bilhete já foi utilizado e não pode ser partilhado');
+      await tx.query(`UPDATE ticket_shares SET to_account_id=$2, claimed_at=now() WHERE id=$1`, [s.id, a.id]);
+      await rotateTicket(tx, s.ticket_id); // o QR e o código antigos deixam de valer; só a conta nova tem os novos
+      await audit(tx, undefined, 'ticket.claim', 'ticket', s.ticket_id, { by: a.id });
+      return { ok: true };
+    });
   }));
 
   app.post('/public/events/:sub/orders', h(async (req) => {

@@ -13,6 +13,7 @@ import { Home } from './pages/Landing';
 // cada página carrega à parte: quem abre a página inicial (ou o bilhete) não descarrega o código da equipa
 const Unsubscribe = lazy(() => import('./pages/Newsletter').then((m) => ({ default: m.Unsubscribe })));
 const AccountDone = lazy(() => import('./pages/Participant').then((m) => ({ default: m.AccountDone })));
+const ClaimTicket = lazy(() => import('./pages/Participant').then((m) => ({ default: m.ClaimTicket })));
 const AccountPage = lazy(() => import('./pages/Participant').then((m) => ({ default: m.AccountPage })));
 const PublicEvent = lazy(() => import('./pages/Public').then((m) => ({ default: m.PublicEvent })));
 const Order = lazy(() => import('./pages/Public').then((m) => ({ default: m.Order })));
@@ -32,7 +33,7 @@ function subdomainOf(host: string, base: string | null) {
   return sub && !sub.includes('.') ? sub : null;
 }
 
-const SPA_PATHS = /^(\/|\/events|\/e\/[^/]+|\/o\/[0-9a-f-]{36}|\/t\/[\w-]+|\/account|\/account\/profile|\/register|\/newsletter\/unsubscribe)\/?$/;
+const SPA_PATHS = /^(\/|\/events|\/e\/[^/]+|\/o\/[0-9a-f-]{36}|\/t\/[\w-]+|\/claim\/[\w-]+|\/account|\/account\/profile|\/register|\/newsletter\/unsubscribe)\/?$/;
 const cachedCfg = (): Config | null => { try { return JSON.parse(localStorage.getItem('bp_cfg') ?? 'null'); } catch { return null; } };
 
 /** Navegação sem recarregar a página (como numa app): os separadores e as ligações internas mudam o ecrã de imediato. */
@@ -94,6 +95,7 @@ function Routes({ cfg, path }: { cfg: Config; path: string }) {
   if ((m = /^\/e\/([a-z0-9-]+)$/.exec(path))) return <PublicEvent slug={m[1]} cfg={cfg} />;
   if ((m = /^\/o\/([0-9a-f-]{36})$/.exec(path))) return <Order id={m[1]} cfg={cfg} />;
   if ((m = /^\/t\/([\w-]+)$/.exec(path))) return <Wallet token={m[1]} cfg={cfg} />;
+  if ((m = /^\/claim\/([\w-]+)$/.exec(path))) return <Suspense fallback={null}><ClaimTicket code={m[1]} /></Suspense>;
   if (path === '/account/done') return <Suspense fallback={null}><AccountDone /></Suspense>;
   if (path === '/newsletter/unsubscribe') return <Suspense fallback={null}><Unsubscribe /></Suspense>;
   if (path === '/account' || path === '/account/') return <Suspense fallback={null}><AccountPage view="tickets" /></Suspense>;
