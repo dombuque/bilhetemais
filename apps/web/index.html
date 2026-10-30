@@ -13,6 +13,13 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <script>
+      /* se um ficheiro da app falhar (versão antiga em cache), relê-se uma vez e a página nunca fica em branco */
+      window.addEventListener('error', function (e) {
+        var t = e.target;
+        if (t && (t.tagName === 'SCRIPT' || t.tagName === 'LINK')) { try { if (sessionStorage.getItem('bp_reload')) return; sessionStorage.setItem('bp_reload', '1'); } catch (x) { return; } if (navigator.serviceWorker) navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }).then(function () { return caches.keys(); }).then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }).finally(function () { location.reload(); }); else location.reload(); }
+      }, true);
+    </script>
   </head>
   <body>
     <div id="root"></div>

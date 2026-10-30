@@ -1938,6 +1938,7 @@ export function createApp(db: Db, cfg: AppConfig) {
         else res.setHeader('Cache-Control', 'public, max-age=600'); // logótipos e ícones: mudam pouco, mas não podem ficar dias desactualizados
       },
     }));
+    app.get(/^\/assets\//, (_req, res) => { res.status(404).type('text/plain').send('não encontrado'); }); // ficheiro antigo que já não existe: 404, nunca a página inicial (a cache da app guardava-a como se fosse código e ficava em branco)
     app.get(/^\/(?!auth|public|webhooks|events|orgs|org\/|users|pos|tickets|merchants|refund-requests|me)/, (_req, res) => { res.setHeader('Cache-Control', 'no-cache'); res.sendFile(join(cfg.webDir!, 'index.html')); });
   }
 

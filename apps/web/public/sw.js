@@ -2,7 +2,7 @@
 // - /assets/* tem hash no nome: cache primeiro (nunca muda).
 // - o resto (logótipo, ícones, manifesto): rede primeiro, com a cache só como recurso se não houver rede.
 // - navegações: rede primeiro; offline mostra a última página guardada.
-const SHELL = 'bilheteplus-shell-v7';
+const SHELL = 'bilheteplus-shell-v8';
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(SHELL).then((c) => c.addAll(['/']))); self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== SHELL).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
@@ -25,7 +25,15 @@ self.addEventListener('fetch', (e) => {
     })());
     return;
   }
-  if (url.pathname.startsWith('/assets/')) { e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request).then(put))); return; }
+  if (url.pathname.startsWith('/assets/')) {
+    // só se guarda código/estilos válidos; se o ficheiro já não existe (versão nova publicada), apaga-se o ecrã guardado para a app reler a versão nova
+    e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request).then((r) => {
+      if (r.ok && !(r.headers.get('content-type') || '').includes('text/html')) return put(r);
+      caches.open(SHELL).then((c) => c.delete('/'));
+      return r;
+    })));
+    return;
+  }
   e.respondWith(fetch(e.request).then(put).catch(() => caches.match(e.request)));
 });
 
