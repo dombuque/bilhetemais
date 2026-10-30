@@ -432,3 +432,7 @@ html { height: 100%; } body { min-height: 100%; }
 @media (min-width: 900px) { .app-tabs { transform: translateX(-50%); } }
 .map-search { box-shadow: 0 2px 8px rgb(11 8 32 / .22), 0 0 0 1px rgb(11 8 32 / .06) !important; }
 .map-chips button { box-shadow: 0 1px 4px rgb(11 8 32 / .22); }
+
+/* sem desfocados: a lista do mapa só com uma sombra curta; a zona da hora/bateria nunca fica translúcida por cima do conteúdo */
+.map-sheet { box-shadow: 0 -2px 10px rgb(21 16 47 / .16); }
+body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background: #0b0820; z-index: 300; pointer-events: none; }
