@@ -21,8 +21,8 @@ export function Platform({ me }: { me: any }) {
   useEffect(() => { if (orgs && filter === 'PENDING' && pending === 0) setFilter('all'); }, [orgs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <Layout me={me} nav={[{ id: 'orgs', label: 'Empresas', icon: 'building' }, { id: 'events', label: 'Eventos', icon: 'ticket' }, { id: 'newsletter', label: 'Newsletter', icon: 'mail' }]} view={view} onView={setView}>
-      {view === 'events' ? <AllEvents /> : view === 'newsletter' ? <NewsletterAdmin toast={toast.show} /> : <>
+    <Layout me={me} nav={[{ id: 'orgs', label: 'Empresas', icon: 'building' }, { id: 'events', label: 'Eventos', icon: 'ticket' }, { id: 'newsletter', label: 'Newsletter', icon: 'mail' }, { id: 'support', label: 'Suporte', icon: 'users' }]} view={view} onView={setView}>
+      {view === 'events' ? <AllEvents /> : view === 'newsletter' ? <NewsletterAdmin toast={toast.show} /> : view === 'support' ? <SupportEmails toast={toast.show} /> : <>
       <PageHead title="Empresas" sub={`${orgs?.length ?? 0} empresa${orgs?.length === 1 ? '' : 's'}${pending ? ` · ${pending} a aguardar aprovação` : ''}`} actions={<button onClick={() => setCreating(true)}><Icon n="plus" />Nova empresa</button>} />
       <div className="seg" role="tablist" style={{ marginBottom: 16 }}>{FILTERS.map(([k, l]) => <button key={k} role="tab" aria-selected={filter === k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>{l}{k === 'PENDING' && pending > 0 ? ` (${pending})` : ''}</button>)}</div>
       <div className="card">
@@ -39,6 +39,28 @@ export function Platform({ me }: { me: any }) {
       </>}
       {toast.node}
     </Layout>
+  );
+}
+
+/** E-mails de suporte da Bilhete+: recebem o aviso quando uma empresa se regista. */
+function SupportEmails({ toast }: { toast: (m: string, e?: boolean) => void }) {
+  const [list, setList] = useState<any[] | null>(null);
+  const [email, setEmail] = useState('');
+  const { busy, run } = useAction(toast);
+  const load = useCallback(() => api('GET', '/platform/support-emails').then(setList), []);
+  useEffect(() => { load(); }, [load]);
+  return (
+    <>
+      <PageHead title="Suporte" sub="Estes e-mails recebem um aviso sempre que uma empresa se regista e aguarda aprovação." />
+      <div className="card stack">
+        <div className="row" style={{ gap: 8 }}>
+          <input type="email" value={email} placeholder="suporte@exemplo.com" aria-label="E-mail de suporte" onChange={(e) => setEmail(e.target.value)} />
+          <button disabled={busy || !/\S+@\S+\.\S+/.test(email)} onClick={() => run(async () => { await api('POST', '/platform/support-emails', { email }); setEmail(''); await load(); }, 'E-mail adicionado')}><Icon n="plus" />Adicionar</button>
+        </div>
+        {!list ? <Skeleton rows={2} /> : list.length === 0 ? <Empty icon="mail">Ainda não há e-mails de suporte. Adicione pelo menos um para ser avisado dos novos registos.</Empty> : (
+          <table className="resp"><tbody>{list.map((r) => <tr key={r.id}><td>{r.email}</td><td className="nolabel"><button className="ghost sm" disabled={busy} onClick={() => run(async () => { await api('DELETE', `/platform/support-emails/${r.id}`); await load(); }, 'E-mail removido')}><Icon n="trash" />Remover</button></td></tr>)}</tbody></table>)}
+      </div>
+    </>
   );
 }
 

@@ -253,6 +253,23 @@ export function createApp(db: Db, cfg: AppConfig) {
       return { id: o.rows[0].id, status: active ? 'ACTIVE' : 'PENDING' };
     });
   }));
+  // e-mails de suporte (backoffice): quem recebe o aviso de cada empresa registada
+  app.get('/platform/support-emails', ...staff('PLATFORM_ADMIN'), h(async () => (await db.query<any>('SELECT id,email,created_at FROM support_emails ORDER BY created_at')).rows));
+  app.post('/platform/support-emails', ...staff('PLATFORM_ADMIN'), h(async (req) => {
+    const email = str(req.body?.email, 'e-mail').toLowerCase();
+    if (!EMAIL.test(email) || email.length > 254) throw new HttpError(400, 'e-mail inválido');
+    const r = await db.query<any>('INSERT INTO support_emails(email) VALUES($1) ON CONFLICT DO NOTHING RETURNING id', [email]);
+    if (!r.rows[0]) throw new HttpError(409, 'este e-mail já está na lista');
+    await audit(db, req.user, 'support.add', 'support_email', r.rows[0].id, { email });
+    return { id: r.rows[0].id, email };
+  }));
+  app.delete('/platform/support-emails/:id', ...staff('PLATFORM_ADMIN'), h(async (req) => {
+    if (!/^[0-9a-f-]{36}$/.test(req.params.id)) throw new HttpError(404, 'não encontrado');
+    const r = await db.query<any>('DELETE FROM support_emails WHERE id=$1 RETURNING email', [req.params.id]);
+    if (!r.rows[0]) throw new HttpError(404, 'não encontrado');
+    await audit(db, req.user, 'support.remove', 'support_email', req.params.id, { email: r.rows[0].email });
+    return { ok: true };
+  }));
   app.post('/orgs/:id/status', ...staff('PLATFORM_ADMIN'), h(async (req) => {
     const status = str(req.body.status, 'status');
     if (!['PENDING', 'ACTIVE', 'REJECTED', 'SUSPENDED', 'DISABLED'].includes(status)) throw new HttpError(400, 'estado inválido');
@@ -1371,6 +1388,20 @@ Recebemos o registo de ${str(b.tradeName, 'nome comercial')}. A nossa equipa vai
 
 Endereço da área da sua equipa (guarde-o): ${cfg.publicUrl ?? ''}/company/${o.rows[0].slug}
 Enquanto a empresa não for aprovada, ao entrar verá «Empresa não aprovada».
+
+Bilhete+` });
+      // avisa os e-mails de suporte registados no backoffice
+      const staffMail = (await tx.query<any>('SELECT email FROM support_emails ORDER BY created_at')).rows;
+      for (const r of staffMail) await queueMail(db, cfg.mailer ?? null, tx, { to: r.email, organizationId: o.rows[0].id, subject: `Nova empresa para aprovar: ${str(b.tradeName, 'nome comercial')} — Bilhete+`,
+        text: `Foi registada uma nova empresa e aguarda aprovação.
+
+Nome comercial: ${str(b.tradeName, 'nome comercial')}
+Denominação legal: ${str(b.legalName, 'denominação legal')}
+NUIT: ${nuit}
+Responsável: ${str(b.contactName, 'responsável')} <${email}>
+Telefone: ${opt(b.phone, 40) ?? '—'}
+
+Aprovar ou rejeitar no backoffice: https://platform.${cfg.baseDomain ?? ''}
 
 Bilhete+` });
       return { id: o.rows[0].id, status: 'PENDING', slug: o.rows[0].slug };
