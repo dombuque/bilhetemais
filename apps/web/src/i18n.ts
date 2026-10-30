@@ -12,6 +12,8 @@ export function getLang(): Lang {
   try { const v = localStorage.getItem(KEY); if (v === 'pt' || v === 'en') return v; } catch { /* sem armazenamento */ }
   return 'pt'; // português por omissão, seja qual for a língua do navegador; a pessoa troca com o botão PT | EN
 }
+/** A pessoa já escolheu a língua? (a app instalada pergunta uma vez, no primeiro arranque) */
+export function hasLang() { try { return localStorage.getItem(KEY) === 'pt' || localStorage.getItem(KEY) === 'en'; } catch { return true; } }
 /** Guarda a escolha e recarrega: a página volta já na nova língua. */
 export function setLang(l: Lang) {
   try { localStorage.setItem(KEY, l); } catch { /* sem armazenamento */ }

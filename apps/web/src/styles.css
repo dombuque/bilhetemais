@@ -448,3 +448,8 @@ html.vt #root > *:first-child { animation: none; }
 .ev-card, .chipf, .pp-btn, .pp-row-head { transition: transform .12s ease, background .15s, box-shadow .2s; } .ev-card:active { transform: scale(.985); }
 .map-sheet { transition: height .32s cubic-bezier(.2, .8, .2, 1); }
 @media (prefers-reduced-motion: reduce) { ::view-transition-old(root), ::view-transition-new(root) { animation: none; } }
+
+/* primeiro arranque da app: escolha da língua */
+.splash.lang-first { flex-direction: column; gap: 12px; align-content: center; justify-items: center; padding: 24px; text-align: center; color: #fff; display: flex; align-items: center; justify-content: center; }
+.splash.lang-first h1 { font: 800 1.8rem var(--font-display); margin: 8px 0 0; } .splash.lang-first p { color: #c9c6e2; margin: 0 0 14px; }
+.splash.lang-first button { width: min(280px, 100%); min-height: 52px; font-size: 1.05rem; background: #fff; color: #0b0820; border-color: #fff; } .splash.lang-first button + button { background: transparent; color: #fff; border-color: rgb(255 255 255 / .5); }

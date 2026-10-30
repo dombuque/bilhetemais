@@ -87,8 +87,11 @@ export const BarRow = ({ label, value, max, text }: { label: string; value: numb
 export interface NavItem { id: string; label: string; icon: string }
 const Account = lazy(() => import('./pages/Account'));
 /** Escolha de língua (PT | EN). */
-export function LangSwitch({ className = '' }: { className?: string }) {
+/** Botão PT | EN. Na app instalada não aparece nos cabeçalhos: a língua escolhe-se no primeiro arranque e muda-se em Perfil → Idioma (`always`). */
+export function LangSwitch({ className = '', always = false }: { className?: string; always?: boolean }) {
   const cur = getLang();
+  const app = typeof matchMedia === 'function' && (matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true);
+  if (app && !always) return null;
   return (
     <span className={'langsw ' + className} data-no-translate role="group" aria-label="Language">
       {(['pt', 'en'] as const).map((l) => <button key={l} type="button" className={'ghost sm' + (cur === l ? ' on' : '')} aria-pressed={cur === l} onClick={() => cur !== l && setLang(l)}>{l.toUpperCase()}</button>)}
