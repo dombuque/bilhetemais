@@ -222,6 +222,7 @@ function Review({ id, onClose, toast }: { id: string; onClose: () => void; toast
         <div><h3>Eventos ({o.events.length})</h3>
           {o.events.length === 0 ? <p className="muted small">Ainda sem eventos.</p> : o.events.map((e: any) => <div className="between small" key={e.id}><span>{e.name}</span><span className="muted">{e.sold} bilhetes · <Pill s={e.status} /></span></div>)}</div>
         <p className="muted small">Área de entrada da equipa: <span className="mono">/company/{o.slug}</span></p>
+        <DeleteOrg id={id} name={o.trade_name} onDone={onClose} toast={toast} />
         {o.status_reason && <p className="muted">Último motivo: {o.status_reason}</p>}
         <Field label="Motivo (obrigatório para rejeitar ou suspender)"><input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ex.: NUIT não confere com a certidão" /></Field>
         <div className="inline">
@@ -231,6 +232,28 @@ function Review({ id, onClose, toast }: { id: string; onClose: () => void; toast
         </div>
       </>}
     </Panel>
+  );
+}
+
+/** Apagar a empresa, sem janelas: abre-se aqui, pede o motivo (auditoria) e o nome para confirmar. Só sem vendas nem movimentos. */
+function DeleteOrg({ id, name, onDone, toast }: { id: string; name: string; onDone: () => void; toast: (m: string, e?: boolean) => void }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [typed, setTyped] = useState('');
+  const { busy, run } = useAction(toast);
+  return (
+    <div className="card flat stack">
+      <div className="between"><div><b>Apagar empresa</b><p className="muted small" style={{ margin: '4px 0 0' }}>Remove a empresa, a equipa e os eventos da plataforma e liberta o NUIT e os e-mails. Só é possível sem vendas nem movimentos (senão, suspenda). Fica registado na auditoria.</p></div>
+        {!open && <button className="ghost danger" onClick={() => setOpen(true)}><Icon n="trash" />Apagar…</button>}</div>
+      {open && <>
+        <Field label="Motivo (fica na auditoria)"><input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ex.: registo de teste / duplicado" /></Field>
+        <Field label={`Escreva o nome da empresa para confirmar: ${name}`}><input value={typed} onChange={(e) => setTyped(e.target.value)} /></Field>
+        <div className="inline">
+          <button className="danger" disabled={busy || reason.trim().length < 3 || typed.trim() !== name.trim()} onClick={() => run(async () => { await api('POST', `/orgs/${id}/delete`, { reason }); onDone(); }, 'Empresa apagada')}>Apagar definitivamente</button>
+          <button className="ghost" disabled={busy} onClick={() => { setOpen(false); setReason(''); setTyped(''); }}>Cancelar</button>
+        </div>
+      </>}
+    </div>
   );
 }
 

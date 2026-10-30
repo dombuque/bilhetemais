@@ -264,7 +264,7 @@ Bilhete+` });
   }));
   // utilizadores geridos no backoffice: administradores Bilhete+ e equipas das empresas
   app.get('/platform/users', ...staff('PLATFORM_ADMIN'), h(async () =>
-    (await db.query<any>(`SELECT u.id,u.name,u.email,u.role,u.status,u.created_at,o.trade_name AS organization,o.id AS organization_id FROM users u LEFT JOIN organizations o ON o.id=u.organization_id ORDER BY (u.role='PLATFORM_ADMIN') DESC, o.trade_name NULLS FIRST, u.created_at`)).rows));
+    (await db.query<any>(`SELECT u.id,u.name,u.email,u.role,u.status,u.created_at,o.trade_name AS organization,o.id AS organization_id FROM users u LEFT JOIN organizations o ON o.id=u.organization_id WHERE o.deleted_at IS NULL ORDER BY (u.role='PLATFORM_ADMIN') DESC, o.trade_name NULLS FIRST, u.created_at`)).rows));
   app.post('/platform/users', ...staff('PLATFORM_ADMIN'), h(async (req) => {
     const b = req.body ?? {};
     const role = str(b.role, 'função') as Role;
@@ -1362,7 +1362,29 @@ Bilhete+` });
     return { id: req.user!.id, name: req.user!.name, role: req.user!.role, orgStatus: req.user!.orgStatus, mfaEnabled: r.rows[0].mfa_enabled, orgName: r.rows[0].org_name, orgSlug: r.rows[0].org_slug, merchantName: r.rows[0].merchant_name, eventId: r.rows[0].merchant_event_id };
   }));
   app.get('/orgs', ...staff('PLATFORM_ADMIN'), h(async () =>
-    (await db.query(`SELECT o.id,o.slug,o.legal_name,o.trade_name,o.nuit,o.status,o.contact_name,o.phone,o.created_at,(SELECT count(*)::int FROM org_documents d WHERE d.organization_id=o.id) AS documents FROM organizations o ORDER BY (o.status='PENDING') DESC, o.created_at DESC`)).rows));
+    (await db.query(`SELECT o.id,o.slug,o.legal_name,o.trade_name,o.nuit,o.status,o.contact_name,o.phone,o.created_at,(SELECT count(*)::int FROM org_documents d WHERE d.organization_id=o.id) AS documents FROM organizations o WHERE o.deleted_at IS NULL ORDER BY (o.status='PENDING') DESC, o.created_at DESC`)).rows));
+  /** Apagar empresa (backoffice): só sem vendas nem movimentos. Fica arquivada com motivo e autor; NUIT, endereço e e-mails ficam livres. */
+  app.post('/orgs/:id/delete', ...staff('PLATFORM_ADMIN'), h(async (req) => {
+    if (!/^[0-9a-f-]{36}$/.test(req.params.id)) throw new HttpError(404, 'empresa não encontrada');
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 300) : '';
+    if (reason.length < 3) throw new HttpError(400, 'indique o motivo');
+    return db.transaction(async (tx) => {
+      const o = (await tx.query<any>('SELECT id,slug,trade_name,nuit,status FROM organizations WHERE id=$1 AND deleted_at IS NULL FOR UPDATE', [req.params.id])).rows[0];
+      if (!o) throw new HttpError(404, 'empresa não encontrada');
+      const paid = (await tx.query<any>(`SELECT count(*)::int AS n FROM ticket_orders p JOIN events e ON e.id=p.event_id WHERE e.organization_id=$1 AND p.status='PAID'`, [o.id])).rows[0].n;
+      const mov = (await tx.query<any>(`SELECT count(*)::int AS n FROM wallet_ledger_entries l JOIN wallets w ON w.id=l.wallet_id JOIN events e ON e.id=w.event_id WHERE e.organization_id=$1`, [o.id])).rows[0].n;
+      if (paid > 0 || mov > 0) throw new HttpError(409, 'esta empresa já tem vendas ou movimentos: não pode ser apagada. Suspenda-a em vez disso');
+      const tag = String(o.id).replace(/-/g, '');
+      await tx.query(`UPDATE events SET deleted_at=now(), deleted_by=$2, delete_reason=$3, status='CANCELLED' WHERE organization_id=$1 AND deleted_at IS NULL`, [o.id, req.user!.id, 'empresa apagada: ' + reason]);
+      await tx.query(`DELETE FROM event_domains WHERE event_id IN (SELECT id FROM events WHERE organization_id=$1)`, [o.id]);
+      await tx.query(`UPDATE ticket_orders SET status='CANCELLED' WHERE status='PENDING_PAYMENT' AND event_id IN (SELECT id FROM events WHERE organization_id=$1)`, [o.id]);
+      await tx.query(`DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE organization_id=$1)`, [o.id]);
+      await tx.query(`UPDATE users SET status='DISABLED', email='apagado-' || id::text || '@invalid.local' WHERE organization_id=$1`, [o.id]);
+      await tx.query(`UPDATE organizations SET status='DISABLED', deleted_at=now(), deleted_by=$2, delete_reason=$3, nuit=nuit || '-del-' || $4, slug='del-' || left($4, 30) WHERE id=$1`, [o.id, req.user!.id, reason, tag]);
+      await audit(tx, req.user, 'org.delete', 'organization', o.id, { name: o.trade_name, nuit: o.nuit, slug: o.slug, status: o.status, reason });
+      return { ok: true };
+    });
+  }));
   /** Todos os eventos de todas as empresas (visão da administração da plataforma). */
   app.get('/platform/events', ...staff('PLATFORM_ADMIN'), h(async () =>
     (await db.query(`SELECT e.id,e.name,e.status,e.starts_at,e.location,d.subdomain,o.trade_name AS organization,o.id AS organization_id,o.status AS org_status,e.theme,e.category,
