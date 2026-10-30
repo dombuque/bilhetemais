@@ -6,7 +6,7 @@ import '@fontsource-variable/inter';
 import '@fontsource-variable/archivo/wdth.css';
 import './styles.css';
 import { BackToTop } from './ui';
-import { hasLang, installTranslator, setLang } from './i18n';
+import { hasLang, inApp, installTranslator, setLang } from './i18n';
 import { setRuntime } from './api';
 import { captureInstallPrompt, InstallBanner } from './install';
 import { Home } from './pages/Landing';
@@ -65,8 +65,7 @@ function App() {
     document.addEventListener('click', click);
     return () => { window.removeEventListener('popstate', sync); document.removeEventListener('click', click); };
   }, []);
-  const app = matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true;
-  if (app && !hasLang()) return (
+  if (inApp() && !hasLang()) return (
     <div className="splash lang-first" data-no-translate>
       <img src="/icon-192.png" alt="" width="84" height="84" />
       <h1>Bilhete+</h1>

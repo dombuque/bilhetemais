@@ -1,5 +1,5 @@
 import { InstallButton } from './install';
-import { getLang, setLang } from './i18n';
+import { getLang, inApp, setLang } from './i18n';
 import QRCode from 'qrcode';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -90,8 +90,7 @@ const Account = lazy(() => import('./pages/Account'));
 /** Botão PT | EN. Na app instalada não aparece nos cabeçalhos: a língua escolhe-se no primeiro arranque e muda-se em Perfil → Idioma (`always`). */
 export function LangSwitch({ className = '', always = false }: { className?: string; always?: boolean }) {
   const cur = getLang();
-  const app = typeof matchMedia === 'function' && (matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true);
-  if (app && !always) return null;
+  if (inApp() && !always) return null;
   return (
     <span className={'langsw ' + className} data-no-translate role="group" aria-label="Language">
       {(['pt', 'en'] as const).map((l) => <button key={l} type="button" className={'ghost sm' + (cur === l ? ' on' : '')} aria-pressed={cur === l} onClick={() => cur !== l && setLang(l)}>{l.toUpperCase()}</button>)}

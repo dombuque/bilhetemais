@@ -12,6 +12,14 @@ export function getLang(): Lang {
   try { const v = localStorage.getItem(KEY); if (v === 'pt' || v === 'en') return v; } catch { /* sem armazenamento */ }
   return 'pt'; // português por omissão, seja qual for a língua do navegador; a pessoa troca com o botão PT | EN
 }
+/** A correr como app instalada (qualquer modo sem barra do navegador, ou aberta pelo ícone: start_url traz ?source=pwa). */
+export function inApp() {
+  try {
+    if (matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: minimal-ui)').matches || matchMedia('(display-mode: fullscreen)').matches || (navigator as any).standalone === true) return true;
+    if (new URLSearchParams(location.search).get('source') === 'pwa') sessionStorage.setItem('bp_app', '1');
+    return sessionStorage.getItem('bp_app') === '1';
+  } catch { return false; }
+}
 /** A pessoa já escolheu a língua? (a app instalada pergunta uma vez, no primeiro arranque) */
 export function hasLang() { try { return localStorage.getItem(KEY) === 'pt' || localStorage.getItem(KEY) === 'en'; } catch { return true; } }
 /** Guarda a escolha e recarrega: a página volta já na nova língua. */
