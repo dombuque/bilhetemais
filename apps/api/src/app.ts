@@ -1365,8 +1365,12 @@ export function createApp(db: Db, cfg: AppConfig) {
         [o.rows[0].id, email, str(b.contactName, 'responsável'), hashPassword(password)]);
       await audit(tx, undefined, 'org.register', 'organization', o.rows[0].id, { nuit });
       await queueMail(db, cfg.mailer ?? null, tx, { to: email, organizationId: o.rows[0].id, subject: 'Recebemos o registo da sua empresa — Bilhete+',
-        text: `Olá ${str(b.contactName, 'responsável')},\n\nRecebemos o registo de ${str(b.tradeName, 'nome comercial')}. A nossa equipa vai validar os dados e avisamos quando a empresa for aprovada. Entretanto pode entrar, completar o perfil e anexar documentos.\n\nBilhete+` });
-      return { id: o.rows[0].id, status: 'PENDING', slug: o.rows[0].slug };
+        text: `Olá ${str(b.contactName, 'responsável')},
+
+Recebemos o registo de ${str(b.tradeName, 'nome comercial')}. A nossa equipa vai validar os dados. Quando a empresa for aprovada, enviamos-lhe por e-mail o endereço da área da sua equipa: até lá não há ligação de acesso.
+
+Bilhete+` });
+      return { id: o.rows[0].id, status: 'PENDING' }; // a ligação da área da empresa só é enviada depois da aprovação
     });
   }));
 
