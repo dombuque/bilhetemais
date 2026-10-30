@@ -150,8 +150,8 @@ function AllEvents() {
             const primary = e.theme?.primary ?? '#5b2eff';
             const bg = e.cover_at && e.subdomain ? `center / cover url(/public/events/${e.subdomain}/assets/cover?v=${+new Date(e.cover_at)})` : `linear-gradient(140deg, ${primary}, #0b0820)`;
             return (
-              <button type="button" key={e.id} className="evcard" onClick={() => setSel(e)} aria-label={`Ver rendimento de ${e.name}`}>
-                <span className="img" style={{ background: bg }}><span className="pillbox"><Pill s={e.status} /></span></span>
+              <button type="button" key={e.id} className={'evcard' + (e.org_status !== 'ACTIVE' ? ' off' : '')} onClick={() => setSel(e)} aria-label={`Ver rendimento de ${e.name}`}>
+                <span className="img" style={{ background: bg }}><span className="pillbox">{e.org_status !== 'ACTIVE' ? <span className="pill">Empresa {e.org_status === 'SUSPENDED' ? 'suspensa' : e.org_status === 'PENDING' ? 'por aprovar' : 'desativada'}</span> : <Pill s={e.status} />}</span></span>
                 <span className="body">
                   <small className="mono">{e.organization} · {dt(e.starts_at)}</small>
                   <b>{e.name}</b>
@@ -187,7 +187,7 @@ function EventEarnings({ ev, onClose }: { ev: any; onClose: () => void }) {
         </tbody></table>
         <div><h3>Por tipo de bilhete</h3>
           {d.byType.map((t: any) => <div className="between small" key={t.name}><span>{t.name}</span><span className="muted">{t.sold} · {mt(t.revenueMinor)}</span></div>)}</div>
-        {ev.subdomain && <a className="btn ghost" href={inApp() ? eventUrl(ev.subdomain) : eventShareUrl(ev.subdomain)} {...(inApp() ? {} : { target: '_blank', rel: 'noopener noreferrer' })}>Abrir página do evento</a>}
+        {ev.subdomain && ev.org_status === 'ACTIVE' && <a className="btn ghost" href={inApp() ? eventUrl(ev.subdomain) : eventShareUrl(ev.subdomain)} {...(inApp() ? {} : { target: '_blank', rel: 'noopener noreferrer' })}>Abrir página do evento</a>}
       </>}
     </Panel>
   );

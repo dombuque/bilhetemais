@@ -1365,7 +1365,7 @@ Bilhete+` });
     (await db.query(`SELECT o.id,o.slug,o.legal_name,o.trade_name,o.nuit,o.status,o.contact_name,o.phone,o.created_at,(SELECT count(*)::int FROM org_documents d WHERE d.organization_id=o.id) AS documents FROM organizations o ORDER BY (o.status='PENDING') DESC, o.created_at DESC`)).rows));
   /** Todos os eventos de todas as empresas (visão da administração da plataforma). */
   app.get('/platform/events', ...staff('PLATFORM_ADMIN'), h(async () =>
-    (await db.query(`SELECT e.id,e.name,e.status,e.starts_at,e.location,d.subdomain,o.trade_name AS organization,o.id AS organization_id,e.theme,e.category,
+    (await db.query(`SELECT e.id,e.name,e.status,e.starts_at,e.location,d.subdomain,o.trade_name AS organization,o.id AS organization_id,o.status AS org_status,e.theme,e.category,
         (SELECT max(a.updated_at) FROM brand_assets a WHERE a.event_id=e.id AND a.kind='cover') AS cover_at,
         (SELECT COALESCE(sum(po.total_minor),0)::text FROM ticket_orders po WHERE po.event_id=e.id AND po.status='PAID') AS revenue_minor,
         (SELECT count(*)::int FROM tickets t WHERE t.event_id=e.id AND t.status IN ('ISSUED','USED')) AS sold,

@@ -466,3 +466,6 @@ body:has(.app-back) .pp-top, body:has(.app-back) .pub-bar { padding-left: 62px; 
 /* um só «voltar»: se o ecrã já tem o seu (cabeçalho do evento/bilhete), o botão flutuante da app esconde-se */
 body:has(.pub-back) .app-back { display: none; }
 body:has(.pub-back) .pub-bar { padding-left: 20px; }
+
+/* eventos de empresas suspensas no backoffice: visíveis, mas desabilitados */
+.evcard.off { filter: grayscale(1); opacity: .6; } .evcard.off .pillbox .pill { background: #3b3a48; color: #fff; }
