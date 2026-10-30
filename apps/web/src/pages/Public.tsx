@@ -1,6 +1,6 @@
 import { locale } from '../i18n';
 import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
-import { accountApi, api, dt, mt, toMinor } from '../api';
+import { accountApi, api, appBack, dt, mt, toMinor } from '../api';
 import type { Config } from '../main';
 import { assetUrl, themeStyle, type Assets, type Theme } from '../theme';
 import { Empty, Field, Icon, MoneyInput, Pill, Qr, LangSwitch, Skeleton, Stepper, TokenCode, useAction, useToast } from '../ui';
@@ -19,7 +19,7 @@ function Frame({ brand, hero, children, bar, size = 'wide' }: { brand?: Brand; h
   return (
     <div className="themed" style={{ ...(brand ? themeStyle(brand.theme) : {}), minHeight: '100vh', background: 'var(--bg)', color: 'var(--text)' } as CSSProperties}>
       <header className="pub-bar">
-        {brand && <a className="pub-back" href="/events" aria-label="Voltar aos eventos"><Icon n="arrowleft" /></a>}
+        {brand && <a className="pub-back" href="/events" aria-label="Voltar" onClick={(e) => { if ((history.state as any)?.bp) { e.preventDefault(); appBack(); } }}><Icon n="arrowleft" /></a>}
         <a href="/" aria-label="Início">{logo ? <img src={logo} alt={brand!.organization} /> : brand ? <span className="pub-brand-name">{brand.organization}</span> : <img src="/logo.svg" alt="Bilhete+" />}</a>
         {brand && logo && <span className="muted small">por {brand.organization}</span>} {/* sem logótipo, o nome da empresa já aparece à esquerda: não se repete */}
         <LangSwitch /><a className="small acct-link" href="/account">{acctName ? <><Icon n="users" />{acctName}</> : 'Entrar'}</a>

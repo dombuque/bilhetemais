@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, dt, eventShareUrl, getToken, mt } from '../api';
+import { api, dt, eventShareUrl, eventUrl, getToken, mt } from '../api';
+import { inApp } from '../i18n';
 import { NewsletterAdmin } from './Newsletter';
 import { Empty, Field, Icon, Layout, Modal, PageHead, Pill, Skeleton, useAction, useToast } from '../ui';
 
@@ -91,7 +92,7 @@ function EventEarnings({ ev, onClose }: { ev: any; onClose: () => void }) {
         </tbody></table>
         <div><h3>Por tipo de bilhete</h3>
           {d.byType.map((t: any) => <div className="between small" key={t.name}><span>{t.name}</span><span className="muted">{t.sold} · {mt(t.revenueMinor)}</span></div>)}</div>
-        {ev.subdomain && <a className="btn ghost" href={eventShareUrl(ev.subdomain)} target="_blank" rel="noopener noreferrer">Abrir página do evento</a>}
+        {ev.subdomain && <a className="btn ghost" href={inApp() ? eventUrl(ev.subdomain) : eventShareUrl(ev.subdomain)} {...(inApp() ? {} : { target: '_blank', rel: 'noopener noreferrer' })}>Abrir página do evento</a>}
       </>}
     </Modal>
   );

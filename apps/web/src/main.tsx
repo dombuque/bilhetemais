@@ -6,8 +6,8 @@ import '@fontsource-variable/inter';
 import '@fontsource-variable/archivo/wdth.css';
 import './styles.css';
 import { BackToTop } from './ui';
-import { installTranslator } from './i18n';
-import { setRuntime } from './api';
+import { inApp, installTranslator } from './i18n';
+import { appBack, setRuntime } from './api';
 import { captureInstallPrompt, InstallBanner } from './install';
 import { Home } from './pages/Landing';
 // cada página carrega à parte: quem abre a página inicial (ou o bilhete) não descarrega o código da equipa
@@ -58,17 +58,20 @@ function App() {
       let u: URL; try { u = new URL(a.href, location.href); } catch { return; }
       if (u.origin !== location.origin || !SPA_PATHS.test(u.pathname)) return;
       e.preventDefault();
-      if (u.pathname + u.search !== location.pathname + location.search) history.pushState(null, '', u.pathname + u.search + u.hash);
+      if (inApp() && u.pathname === '/') u.pathname = '/events'; // na app, o logótipo e «Início» levam ao início da app, nunca ao site
+      if (u.pathname + u.search !== location.pathname + location.search) history.pushState({ bp: 1 }, '', u.pathname + u.search + u.hash);
       sync();
     };
     window.addEventListener('popstate', sync);
     document.addEventListener('click', click);
     return () => { window.removeEventListener('popstate', sync); document.removeEventListener('click', click); };
   }, []);
+  useEffect(() => { if (cfg && inApp() && path === '/' && !subdomainOf(location.hostname, cfg.baseDomain)) { history.replaceState(history.state, '', '/events'); setPath('/events'); } }, [cfg, path]);
   if (!cfg) return <div className="splash"><img src="/icon-192.png" alt="" width="84" height="84" /></div>;
   return <>
     <Routes key={path} cfg={cfg} path={path} />
     {path !== '/events' && <BackToTop />}
+    {inApp() && /^\/(o\/|t\/|register|newsletter|logo-options)/.test(path) && <button type="button" className="app-back" aria-label="Voltar" onClick={appBack}><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M11 6l-6 6 6 6" /></svg></button>}
     {!/^\/(platform|company|staff)(\/|$)/.test(path) && <InstallBanner />}
   </>;
 }
@@ -114,3 +117,24 @@ captureInstallPrompt();
 installTranslator();
 createRoot(document.getElementById('root')!).render(<StrictMode><Suspense fallback={null}><App /></Suspense></StrictMode>);
 if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('/sw.js').catch(() => {});
+
+/** Actualização automática: ao voltar à app (e de 10 em 10 minutos) confere se há versão nova; se houver, recarrega sozinha quando a app esteve em segundo plano, ou avisa. */
+if (import.meta.env.PROD) {
+  const mine = document.querySelector<HTMLScriptElement>('script[type="module"][src*="/assets/"]')?.getAttribute('src') ?? '';
+  let hiddenAt = 0, busy = false;
+  const check = async (reload: boolean) => {
+    if (busy || !mine) return; busy = true;
+    try {
+      const html = await fetch('/', { cache: 'no-store', headers: { Accept: 'text/html' } }).then((r) => r.text());
+      const now = /<script[^>]+type="module"[^>]+src="([^"]*\/assets\/[^"]+)"/.exec(html)?.[1];
+      if (now && now !== mine) {
+        const reg = await navigator.serviceWorker?.getRegistration(); await reg?.update().catch(() => {});
+        try { (await caches.keys()).forEach((k) => caches.delete(k)); } catch { /* sem cache */ }
+        if (reload) location.reload(); else document.body.insertAdjacentHTML('beforeend', '<button type="button" id="upd" style="position:fixed;left:50%;transform:translateX(-50%);bottom:84px;z-index:500;background:#0b0820;color:#fff;border:1px solid #5ce1ff;border-radius:99px;padding:12px 18px;font:700 .9rem sans-serif" onclick="location.reload()">Nova versão disponível · Atualizar</button>');
+      }
+    } catch { /* sem rede */ } finally { busy = false; }
+  };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') hiddenAt = Date.now(); else if (hiddenAt && Date.now() - hiddenAt > 20_000) check(true); });
+  setInterval(() => { if (document.visibilityState === 'visible') check(false); }, 10 * 60_000);
+  setTimeout(() => check(false), 15_000);
+}

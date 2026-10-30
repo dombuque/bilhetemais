@@ -1,6 +1,7 @@
 import { locale } from '../i18n';
 import { useCallback, useEffect, useState } from 'react';
-import { api, dt, eventShareUrl, mt, toMinor } from '../api';
+import { api, dt, eventShareUrl, eventUrl, mt, toMinor } from '../api';
+import { inApp } from '../i18n';
 import { BarRow, ConfirmButton, Empty, Field, Icon, Layout, Modal, MoneyInput, PageHead, Pill, Skeleton, useAction, useToast } from '../ui';
 import { BrandEditor } from './Brand';
 import { Company } from './Company';
@@ -143,7 +144,7 @@ function EventAdmin({ id, back, toast, onOpen }: { id: string; back: () => void;
       <a href="#back" onClick={(e) => { e.preventDefault(); back(); }} className="crumb"><Icon n="back" />Eventos</a>
       <PageHead title={ev.name} sub={<><Pill s={ev.status} /> · {dt(ev.starts_at)}{ov.parent && <> · herda de <a href="#parent" onClick={(e) => { e.preventDefault(); onOpen(ov.parent.id); }}>{ov.parent.name}</a></>}</>}
         actions={<>
-          <a className="btn ghost" href={url} target="_blank" rel="noreferrer">Ver página pública</a>
+          <a className="btn ghost" href={inApp() ? eventUrl(ev.subdomain) : url} {...(inApp() ? {} : { target: '_blank', rel: 'noreferrer' })}>Ver página pública</a>
           {ev.status !== 'PUBLISHED' && <button disabled={busy} onClick={() => act(() => api('POST', `/events/${id}/publish`, {}), 'Evento publicado')}>Publicar</button>}
         </>} />
       <div className="seg scroll" role="tablist" style={{ marginBottom: 18 }}>{TABS.map((t) => <button key={t} role="tab" aria-selected={t === tab} className={t === tab ? 'on' : ''} onClick={() => setTab(t)}>{t}</button>)}</div>

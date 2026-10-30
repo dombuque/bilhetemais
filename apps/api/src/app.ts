@@ -126,6 +126,8 @@ export function createApp(db: Db, cfg: AppConfig) {
 
   // /events é, ao mesmo tempo, a lista de eventos da equipa (API, com sessão) e a página pública de descoberta:
   // quem abre o endereço no navegador (Accept: text/html) recebe a página; a aplicação pede o JSON com fetch
+  // a app instalada também abre os endereços curtos dos eventos (<evento>.<domínio>) em vez de os mandar para o navegador (scope_extensions)
+  app.get('/.well-known/web-app-origin-association', (_req, res) => { res.type('application/json').set('Cache-Control', 'public, max-age=3600').json({ [(cfg.publicUrl ?? '') + '/']: { scope: '/' } }); });
   if (cfg.webDir && existsSync(join(cfg.webDir, 'index.html'))) {
     app.get('/events', (req, res, next) => (/text\/html/.test(req.headers.accept ?? '') ? (res.setHeader('Cache-Control', 'no-cache'), res.sendFile(join(cfg.webDir!, 'index.html'))) : next()));
   }

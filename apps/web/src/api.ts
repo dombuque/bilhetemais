@@ -1,4 +1,4 @@
-import { locale } from './i18n';
+import { inApp, locale } from './i18n';
 export class ApiError extends Error {
   constructor(public status: number, message: string, public code?: string) { super(message); }
 }
@@ -22,8 +22,7 @@ export const setRuntime = (c: { baseDomain?: string | null; publicUrl?: string |
 /** Endereço de um evento: o seu subdomínio (`feira.bilhetemais.live`) quando há domínio base; senão `/e/<evento>`. */
 export const eventUrl = (slug: string) => {
   // dentro da app instalada o evento abre no mesmo endereço (sem a barra de «sair» que o navegador põe ao mudar de endereço)
-  const standalone = window.matchMedia?.('(display-mode: standalone)').matches || (navigator as any).standalone === true;
-  return runtime.baseDomain && !standalone ? `https://${slug}.${runtime.baseDomain}` : `${location.origin}/e/${slug}`;
+  return runtime.baseDomain && !inApp() ? `https://${slug}.${runtime.baseDomain}` : `${location.origin}/e/${slug}`;
 };
 /** Endereço público do evento, para partilhar, imprimir ou pôr em QR (sempre o subdomínio, quando há). */
 export const eventShareUrl = (slug: string) => (runtime.baseDomain ? `https://${slug}.${runtime.baseDomain}` : `${location.origin}/e/${slug}`);
@@ -117,4 +116,16 @@ export async function download(path: string, filename: string) {
   const url = URL.createObjectURL(await r.blob());
   const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+/** Vai para um endereço: no mesmo site muda de ecrã sem recarregar (como numa app); noutro site abre normalmente. */
+export function goTo(url: string) {
+  const u = new URL(url, location.href);
+  if (u.origin !== location.origin) { location.assign(u.href); return; }
+  const a = document.createElement('a'); a.href = u.pathname + u.search + u.hash; document.body.appendChild(a); a.click(); a.remove();
+}
+
+/** «Voltar» da app: regressa ao ecrã anterior da própria app; se não houver (abriu directamente), vai para os eventos. */
+export function appBack() {
+  if ((history.state as any)?.bp) history.back(); else goTo('/events');
 }
