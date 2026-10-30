@@ -40,7 +40,7 @@ export function Home({ canRegister }: { canRegister: boolean }) {
       <header className={'lp-nav' + (solid ? ' solid' : '')}>
         <a href="/" aria-label="Bilhete+"><img src={solid ? "/logo-dark.svg" : "/logo-white.svg"} alt="Bilhete+" /></a>
         <nav aria-label="Secções"><a href="/events">Eventos</a><a href="#o-que-fazemos">O que fazemos</a><a href="#inclusao">Sem smartphone</a><a href="#como-funciona">Como funciona</a></nav>
-        <div className="go"><LangSwitch className="on-dark" /><a className="lp-btn ghost sm acct" href="/account">{acctName ? <><Icon n="users" />{acctName}</> : 'Entrar'}</a>{canRegister ? <a className="lp-btn sm" href="/register">Registar empresa</a> : <a className="lp-btn sm" href="/events">Explorar</a>}</div>
+        <div className="go"><LangSwitch className="on-dark" />{acctName && <a className="lp-btn ghost sm acct" href="/account"><Icon n="users" />{acctName}</a>}{canRegister ? <a className="lp-btn sm" href="/register">Registar empresa</a> : <a className="lp-btn sm" href="/events">Explorar</a>}</div>
       </header>
       {/* ===== HERO ===== */}
       <section className="lp-hero">
