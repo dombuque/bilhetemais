@@ -1,5 +1,6 @@
 import { lazy, StrictMode, Suspense, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
 import '@fontsource-variable/sora';
 import '@fontsource-variable/inter';
 import '@fontsource-variable/archivo/wdth.css';
@@ -43,7 +44,13 @@ function App() {
       .catch(() => setCfg((cur) => cur ?? { baseDomain: null, simulator: false, selfRegistration: false }));
   }, []);
   useEffect(() => {
-    const sync = () => { setPath(location.pathname); window.scrollTo(0, 0); };
+    // troca de ecrã com transição suave (cruzamento) quando o navegador suporta; a barra de baixo fica parada
+    const sync = () => {
+      const go = () => { flushSync(() => setPath(location.pathname)); window.scrollTo(0, 0); };
+      const vt = (document as any).startViewTransition;
+      if (typeof vt === 'function' && !matchMedia('(prefers-reduced-motion: reduce)').matches && document.visibilityState === 'visible') { document.documentElement.classList.add('vt'); const t = vt.call(document, go); t.finished.finally(() => document.documentElement.classList.remove('vt')); }
+      else go();
+    };
     const click = (e: MouseEvent) => {
       const a = (e.target as Element | null)?.closest?.('a');
       if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -98,6 +105,10 @@ function Routes({ cfg, path }: { cfg: Config; path: string }) {
   if (sub && path === '/') return <PublicEvent slug={sub} cfg={cfg} />;
   return <Home canRegister={cfg.selfRegistration} />;
 }
+
+// descarrega em segundo plano os ecrãs seguintes, para a troca não passar por um ecrã vazio
+const idle = (window as any).requestIdleCallback ?? ((f: () => void) => setTimeout(f, 1200));
+idle(() => { import('./pages/Participant'); import('./pages/Public'); import('./pages/Discover'); import('./map/Maps'); });
 
 captureInstallPrompt();
 installTranslator();
