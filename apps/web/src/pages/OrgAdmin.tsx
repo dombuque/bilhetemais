@@ -1,6 +1,6 @@
 import { locale } from '../i18n';
-import { useCallback, useEffect, useState } from 'react';
-import { api, dt, eventShareUrl, eventUrl, mt, toMinor } from '../api';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { api, dt, eventShareUrl, eventUrl, mt, shrinkImage, toMinor, upload } from '../api';
 import { inApp } from '../i18n';
 import { BarRow, ConfirmButton, Empty, Field, Icon, Layout, Modal, MoneyInput, PageHead, Pill, Skeleton, useAction, useToast } from '../ui';
 import { BrandEditor } from './Brand';
@@ -40,6 +40,8 @@ function Events({ onOpen, toast }: { onOpen: (id: string) => void; toast: Toast 
   useEffect(() => { load(); fetch('/public/config').then((r) => r.json()).then((c) => setBase(c.baseDomain)); }, [load]);
   return (
     <>
+      {create && <NewEvent events={events ?? []} toast={toast} onClose={() => setCreate(false)} onCreated={(id) => { setCreate(false); onOpen(id); }} />}
+      <div hidden={create}>
       <PageHead title="Eventos" actions={<button onClick={() => setCreate(true)}><Icon n="plus" />Novo evento</button>} />
       {!events ? <Skeleton rows={3} /> : events.length === 0 ? (
         <div className="card stack center" style={{ padding: 40 }}><Empty icon="ticket">Ainda não tem eventos. Crie o primeiro para começar a vender bilhetes.</Empty><button className="big" style={{ justifySelf: 'center' }} onClick={() => setCreate(true)}><Icon n="plus" />Criar o primeiro evento</button></div>
@@ -65,7 +67,7 @@ function Events({ onOpen, toast }: { onOpen: (id: string) => void; toast: Toast 
             </button>);
         })}</div>
       )}
-      {create && <NewEvent events={events ?? []} toast={toast} onClose={() => setCreate(false)} onCreated={(id) => { setCreate(false); onOpen(id); }} />}
+      </div>
     </>
   );
 }
@@ -78,6 +80,9 @@ function NewEvent({ events, toast, onClose, onCreated }: { events: any[]; toast:
   const [from, setFrom] = useState('');
   const [inherit, setInherit] = useState(true);
   const [copy, setCopy] = useState<string[]>(['ticketTypes', 'gates']);
+  const [cover, setCover] = useState<File | null>(null);
+  const [logo, setLogo] = useState<File | null>(null);
+  const [gallery, setGallery] = useState<File[]>([]);
   const { busy, run } = useAction(toast);
   // o endereço sugere-se a partir do nome, a menos que a pessoa o tenha escrito; verifica-se se está livre
   useEffect(() => { if (!subEdited) setSub(f.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30)); }, [f.name, subEdited]);
@@ -88,7 +93,10 @@ function NewEvent({ events, toast, onClose, onCreated }: { events: any[]; toast:
   }, [sub]);
   const toggle = (k: string) => setCopy((c) => (c.includes(k) ? c.filter((x) => x !== k) : [...c, k]));
   return (
-    <Modal title="Novo evento" onClose={onClose}>
+    <div className="stack">
+      <a href="#back" onClick={(e) => { e.preventDefault(); onClose(); }} className="crumb"><Icon n="back" />Eventos</a>
+      <PageHead title="Novo evento" />
+      <div className="card stack">
       <Field label="Nome"><input value={f.name} autoFocus onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
       <Field label="Endereço curto do evento" hint="Será o endereço público do evento. Só letras, números e hífens; tem de ser único.">
         <div className="sub-input"><input value={sub} maxLength={36} autoCapitalize="off" spellCheck={false} placeholder="feira-de-maputo" onChange={(e) => { setSubEdited(true); setSub(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')); }} /><span className="mono">.{location.hostname.split('.').slice(-2).join('.')}</span></div>
@@ -102,6 +110,15 @@ function NewEvent({ events, toast, onClose, onCreated }: { events: any[]; toast:
       </div>
       <Field label="Categoria"><select value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}><option value="">Sem categoria</option>{[['MUSICA', 'Música'], ['FESTIVAL', 'Festival'], ['CONFERENCIA', 'Conferência'], ['FEIRA', 'Feira'], ['DESPORTO', 'Desporto'], ['TEATRO', 'Teatro'], ['GASTRONOMIA', 'Gastronomia'], ['EMPRESARIAL', 'Empresarial'], ['OUTRO', 'Outro']].map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
       <Field label="Local"><input value={f.location} placeholder="Ex.: Estádio da Machava, Maputo" onChange={(e) => setF({ ...f, location: e.target.value })} /></Field>
+      <div className="stack-sm">
+        <h3 style={{ margin: 0 }}>Imagens</h3>
+        <p className="muted small" style={{ margin: 0 }}>Opcional agora: pode acrescentar ou trocar mais tarde na aba Aparência e na aba Conteúdo.</p>
+        <div className="field-row">
+          <ImagePick label="Banner / imagem de capa" hint="Aparece no topo da página do evento (até 1600 px)." file={cover} onPick={(fl) => setCover(fl[0] ?? null)} />
+          <ImagePick label="Logótipo" hint="Quadrado ou horizontal, fundo transparente (até 600 px)." file={logo} onPick={(fl) => setLogo(fl[0] ?? null)} />
+        </div>
+        <ImagePick label="Galeria de fotos" hint="Até 12 imagens." multiple files={gallery} onPick={(fl) => setGallery((g) => [...g, ...fl].slice(0, 12))} onClear={() => setGallery([])} />
+      </div>
       {events.length > 0 && (
         <div className="card flat stack-sm">
           <Field label="Basear noutro evento" hint="Reaproveite bilhetes, portas e comerciantes, e herde parâmetros e aparência."><select value={from} onChange={(e) => setFrom(e.target.value)}><option value="">Começar do zero</option>{events.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></Field>
@@ -114,9 +131,36 @@ function NewEvent({ events, toast, onClose, onCreated }: { events: any[]; toast:
       )}
       <button className="big wide" disabled={busy || !f.name || !f.startsAt || !f.endsAt || (!!sub && chk !== null && !chk.available)} onClick={() => run(async () => {
         const r = await api('POST', '/events', { ...f, ...(sub ? { subdomain: sub } : {}), startsAt: new Date(f.startsAt).toISOString(), endsAt: new Date(f.endsAt).toISOString(), ...(from ? { inheritFrom: from, inherit, copy } : {}) });
+        // as imagens seguem logo a seguir à criação; se alguma falhar, o evento fica criado e o aviso diz qual
+        const failed: string[] = [];
+        const send = async (label: string, fn: () => Promise<unknown>) => { try { await fn(); } catch { failed.push(label); } };
+        if (cover) await send('banner', async () => upload('PUT', `/events/${r.id}/assets/cover`, await shrinkImage(cover, 1600)));
+        if (logo) await send('logótipo', async () => upload('PUT', `/events/${r.id}/assets/logo`, await shrinkImage(logo, 600)));
+        for (const g of gallery) await send('foto da galeria', async () => upload('POST', `/events/${r.id}/images`, await shrinkImage(g, 1600), { 'x-caption': '' }));
+        if (failed.length) toast(`Evento criado, mas não foi possível enviar: ${failed.join(', ')}. Tente na aba Aparência/Conteúdo.`, true);
         onCreated(r.id);
       }, 'Evento criado')}>Criar evento</button>
-    </Modal>
+      </div>
+    </div>
+  );
+}
+
+/** Escolha de imagem com pré-visualização (sem janelas). */
+function ImagePick({ label, hint, file, files, multiple, onPick, onClear }: { label: string; hint: string; file?: File | null; files?: File[]; multiple?: boolean; onPick: (f: File[]) => void; onClear?: () => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const list = multiple ? files ?? [] : file ? [file] : [];
+  const key = list.map((x) => x.name + x.size + x.lastModified).join('|');
+  const [urls, setUrls] = useState<string[]>([]);
+  useEffect(() => { const u = list.map((x) => URL.createObjectURL(x)); setUrls(u); return () => u.forEach((x) => URL.revokeObjectURL(x)); }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="stack-sm">
+      <b>{label}</b>
+      <input ref={input} type="file" hidden multiple={multiple} accept="image/png,image/jpeg,image/webp" onChange={(e) => { onPick(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
+      {urls.length > 0 && <div className="inline" style={{ flexWrap: 'wrap', gap: 8 }}>{urls.map((u, i) => <img key={u} src={u} alt="" style={{ height: 72, maxWidth: 160, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--line)' }} />)}</div>}
+      <div className="inline"><button type="button" className="ghost sm" onClick={() => input.current?.click()}><Icon n="plus" />{list.length ? (multiple ? 'Acrescentar' : 'Trocar') : 'Escolher imagem'}</button>
+        {list.length > 0 && <button type="button" className="ghost sm" onClick={() => (multiple ? onClear?.() : onPick([]))}>Remover</button>}</div>
+      <small className="muted">{hint}</small>
+    </div>
   );
 }
 

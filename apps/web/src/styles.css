@@ -459,3 +459,6 @@ html.vt #root > *:first-child { animation: none; }
 /* app: botão voltar em qualquer ecrã secundário */
 .app-back { position: fixed; top: calc(10px + env(safe-area-inset-top)); left: 10px; z-index: 90; width: 42px; height: 42px; min-height: 0; padding: 0; border-radius: 50%; background: rgb(11 8 32 / .86); color: #fff; border: 1px solid rgb(255 255 255 / .18); display: grid; place-items: center; box-shadow: 0 2px 8px rgb(0 0 0 / .28); }
 body:has(.app-back) .pp-top, body:has(.app-back) .pub-bar { padding-left: 62px; }
+
+/* painéis que antes eram janelas */
+.inline-panel { scroll-margin-top: 16px; margin: 16px 0; border: 1.5px solid var(--line-strong, #cfcae6); max-width: 720px; }

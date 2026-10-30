@@ -57,16 +57,17 @@ export function ConfirmButton({ label, confirmLabel = 'Confirmar', onConfirm, di
     : <button className={className} disabled={disabled} onClick={() => setArm(true)}>{label}</button>;
 }
 
+/** «Janela» sem janela: abre no próprio ecrã, como um painel, e leva a vista até ele. Fecha com o botão ou com Esc. */
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => { ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, []);
   useEffect(() => { const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose(); window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [onClose]);
-  // desenhada no <body>: dentro de um menu fixo ou de uma barra recortada ficaria presa (e cortada) à caixa do pai
-  return createPortal(
-    <div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="sheet stack" role="dialog" aria-modal="true" aria-label={title}>
-        <div className="between"><h2>{title}</h2><button className="ghost sm" aria-label="Fechar" onClick={onClose}><Icon n="x" /></button></div>
-        {children}
-      </div>
-    </div>, document.body);
+  return (
+    <section ref={ref} className="inline-panel card stack" role="region" aria-label={title}>
+      <div className="between"><h2>{title}</h2><button className="ghost sm" aria-label="Fechar" onClick={onClose}><Icon n="x" />Fechar</button></div>
+      {children}
+    </section>
+  );
 }
 
 export const Empty = ({ icon = 'box', children }: { icon?: string; children: ReactNode }) => <div className="empty"><Icon n={icon} className="" />{<p>{children}</p>}</div>;
