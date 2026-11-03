@@ -164,7 +164,49 @@ function ImagePick({ label, hint, file, files, multiple, onPick, onClear }: { la
   );
 }
 
-const TABS = ['Resumo', 'Bilhetes', 'Comerciantes', 'Portas', 'Acertos', 'Reembolsos', 'Conteúdo', 'Parâmetros', 'Aparência'] as const;
+const TABS = ['Resumo', 'Bilhetes', 'Credenciais', 'Comerciantes', 'Portas', 'Acertos', 'Reembolsos', 'Conteúdo', 'Parâmetros', 'Aparência'] as const;
+
+/** Credenciais a custo zero (staff, fornecedores, imprensa, convidados): emitir, enviar o link, ver quem entrou e cancelar. Tudo inline. */
+function Credentials({ id, toast }: { id: string; toast: (m: string, e?: boolean) => void }) {
+  const [data, setData] = useState<any>(null);
+  const [f, setF] = useState({ name: '', category: 'Staff', other: '', contact: '' });
+  const [cancelFor, setCancelFor] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const { busy, run } = useAction(toast);
+  const load = useCallback(() => api('GET', `/events/${id}/credentials`).then(setData), [id]);
+  useEffect(() => { load(); }, [load]);
+  const cats: string[] = data?.categories ?? ['Staff', 'Fornecedor', 'Imprensa', 'Convidado'];
+  const category = f.category === '__other' ? f.other.trim() : f.category;
+  const state = (c: any) => c.status === 'REVOKED' ? ['bad', 'Cancelada'] : c.status === 'BLOCKED' ? ['bad', 'Bloqueada'] : c.inside ? ['ok', 'Dentro'] : c.status === 'USED' ? ['warn', 'Já saiu'] : ['', 'Por usar'];
+  return (
+    <div className="stack">
+      <div className="card stack">
+        <h2 style={{ margin: 0 }}>Nova credencial</h2>
+        <p className="muted small" style={{ margin: 0 }}>Para quem trabalha ou é convidado: entra pela mesma portaria, sem custo e sem contar para a lotação à venda. Se indicar e-mail ou telemóvel, a pessoa recebe o link.</p>
+        <div className="field-row">
+          <Field label="Nome"><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
+          <Field label="Categoria"><select value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>{cats.map((c) => <option key={c} value={c}>{c}</option>)}<option value="__other">Outra…</option></select></Field>
+        </div>
+        {f.category === '__other' && <Field label="Nome da categoria"><input value={f.other} maxLength={40} placeholder="Ex.: Artista, Patrocinador" onChange={(e) => setF({ ...f, other: e.target.value })} /></Field>}
+        <Field label="E-mail ou telemóvel (opcional)"><input value={f.contact} placeholder="nome@exemplo.com ou 84 123 4567" onChange={(e) => setF({ ...f, contact: e.target.value })} /></Field>
+        <button disabled={busy || !f.name.trim() || !category} onClick={() => run(async () => { await api('POST', `/events/${id}/credentials`, { name: f.name, category, contact: f.contact }); setF({ ...f, name: '', contact: '' }); await load(); }, 'Credencial emitida')}>{busy ? 'A emitir…' : 'Emitir credencial'}</button>
+      </div>
+      <div className="card">
+        {!data ? <Skeleton rows={3} /> : data.items.length === 0 ? <Empty icon="ticket">Ainda sem credenciais neste evento.</Empty> : (
+          <table className="resp"><thead><tr><th>Nome</th><th>Categoria</th><th>Código</th><th>Estado</th><th /></tr></thead>
+            <tbody>{data.items.map((c: any) => { const [lvl, txt] = state(c); return (
+              <tr key={c.id}>
+                <td data-l="Nome"><b>{c.name}</b>{c.contact && <><br /><small className="muted">{c.contact}</small></>}</td>
+                <td data-l="Categoria">{c.category}</td>
+                <td data-l="Código"><span className="mono">{c.short_code}</span></td>
+                <td data-l="Estado"><span className={'pill ' + lvl}>{txt}</span></td>
+                <td className="nolabel">{cancelFor === c.id
+                  ? <span className="inline"><input value={reason} placeholder="Motivo" aria-label="Motivo" onChange={(e) => setReason(e.target.value)} /><button className="danger sm" disabled={busy || reason.trim().length < 3} onClick={() => run(async () => { await api('POST', `/tickets/${c.id}/cancel`, { reason }); setCancelFor(null); setReason(''); await load(); }, 'Credencial cancelada')}>Cancelar credencial</button><button className="ghost sm" onClick={() => setCancelFor(null)}>Voltar</button></span>
+                  : <span className="inline"><button className="ghost sm" onClick={() => { navigator.clipboard?.writeText(c.link); toast('Link copiado'); }}><Icon n="copy" />Copiar link</button>{c.status !== 'REVOKED' && <button className="ghost sm" onClick={() => setCancelFor(c.id)}>Cancelar</button>}</span>}</td></tr>); })}</tbody></table>)}
+      </div>
+    </div>
+  );
+}
 
 /** Eliminar o evento, sem janelas: abre-se aqui mesmo, pede o motivo (fica na auditoria) e só funciona sem vendas nem movimentos. */
 function DeleteEvent({ id, name, sold, onDone, toast }: { id: string; name: string; sold: number; onDone: () => void; toast: (m: string, e?: boolean) => void }) {
@@ -227,6 +269,7 @@ function EventAdmin({ id, back, toast, onOpen }: { id: string; back: () => void;
       </div>}
       {tab === 'Acertos' && <SettlementsTab id={id} toast={toast} />}
       {tab === 'Reembolsos' && <Refunds ov={ov} act={act} busy={busy} />}
+      {tab === 'Credenciais' && <Credentials id={id} toast={toast} />}
       {tab === 'Conteúdo' && <ContentTab id={id} ev={ev} toast={toast} onChange={load} />}
       {tab === 'Parâmetros' && <SettingsTab id={id} ov={ov} siblings={siblings.filter((e) => e.id !== id)} toast={toast} onChange={load} />}
       {tab === 'Aparência' && <BrandEditor base={`/events/${id}`} theme={ev.theme} assets={ov.ownAssets} inherited={ov.inheritedTheme} onChange={load} toast={toast} />}
@@ -236,6 +279,29 @@ function EventAdmin({ id, back, toast, onOpen }: { id: string; back: () => void;
 
 const K = ({ l, v, icon, sub }: { l: string; v: any; icon: string; sub?: string }) => <div className="kpi"><span><Icon n={icon} className="" />{l}</span><b>{v}</b>{sub && <small>{sub}</small>}</div>;
 
+/** Lotação em tempo real: pessoas dentro agora (entradas menos saídas) face à capacidade; atualiza sozinha. */
+function Occupancy({ id }: { id: string }) {
+  const [st, setSt] = useState<any>(null);
+  useEffect(() => {
+    let stop = false;
+    const tick = () => api('GET', `/events/${id}/gate-stats`).then((r) => { if (!stop) setSt(r); }).catch(() => {});
+    tick(); const t = setInterval(tick, 15000);
+    return () => { stop = true; clearInterval(t); };
+  }, [id]);
+  if (!st) return null;
+  const inside = st.inside ?? 0, cap = st.capacity ?? 0;
+  const pct = cap ? Math.min(100, Math.round((inside / cap) * 100)) : 0;
+  const level = !cap ? 'ok' : pct >= 100 ? 'bad' : pct >= 90 ? 'warn' : 'ok';
+  return (
+    <div className="card stack-sm" aria-live="polite">
+      <div className="between"><h3 style={{ margin: 0 }}>Lotação agora</h3><span className={'pill ' + level}>{!cap ? 'sem capacidade definida' : pct >= 100 ? 'Lotação esgotada' : pct >= 90 ? 'Quase cheia' : 'Normal'}</span></div>
+      <div className="between"><b style={{ font: '800 2rem var(--font-display)' }}>{inside}</b><span className="muted">{cap ? `de ${cap} (${pct}%)` : 'pessoas dentro'}</span></div>
+      {cap > 0 && <div className="track"><div className="fill" style={{ width: `${pct}%`, background: level === 'bad' ? 'var(--bad)' : level === 'warn' ? 'var(--warn)' : undefined }} /></div>}
+      <small className="muted">Entradas menos saídas lidas na portaria · já entraram {st.entered ?? 0} no total.</small>
+    </div>
+  );
+}
+
 function Summary({ ov, rep, url, alerts }: { ov: any; rep: any; url: string; alerts: any[] }) {
   const [poster, setPoster] = useState(false);
   const diff = BigInt(rep.reconciliation.differenceMinor);
@@ -243,6 +309,7 @@ function Summary({ ov, rep, url, alerts }: { ov: any; rep: any; url: string; ale
   return (
     <div className="stack">
       {alerts.length > 0 && <div className="card stack-sm" style={{ borderColor: 'var(--warn)' }}><h3>Alertas</h3>{alerts.map((a, i) => <p key={i} className="inline"><span className={'pill ' + (a.level === 'bad' ? 'bad' : 'warn')}>{a.level === 'bad' ? 'Crítico' : 'Atenção'}</span><span>{a.text}</span></p>)}</div>}
+      <Occupancy id={ov.event.id} />
       <div className="kpis">
         <K l="Bilhetes emitidos" v={rep.tickets.issued} icon="ticket" /><K l="Entradas" v={rep.tickets.entered} icon="door" sub={rep.tickets.issued ? `${Math.round((rep.tickets.entered / rep.tickets.issued) * 100)}% dos emitidos` : undefined} />
         <K l="Receita de bilhética" v={mt(rep.tickets.revenueMinor)} icon="cash" /><K l="Carregamentos" v={mt(rep.wallets.topupsMinor)} icon="wallet" />

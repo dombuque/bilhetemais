@@ -83,7 +83,7 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     }
     const pending = await login('adminA@org.test');
     expect((await call('POST', '/events', { name: 'X', startsAt: '2030-01-01', endsAt: '2030-01-02' }, pending)).status).toBe(403);
-    for (const n of ['A', 'B']) expect((await call('POST', `/orgs/${S['org' + n]}/status`, { status: 'ACTIVE' }, root)).status).toBe(200);
+    for (const n of ['A', 'B']) expect((await call('POST', `/orgs/${S['org' + n]}/status`, { status: 'ACTIVE', skipDocs: true }, root)).status).toBe(200);
     S.adminA = await login('adminA@org.test');
     S.adminB = await login('adminB@org.test');
   });
@@ -589,7 +589,7 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     const orgA = (await call('GET', '/orgs', undefined, root)).body.find((o: any) => o.slug === 'org-a');
     await call('POST', `/orgs/${orgA.id}/status`, { status: 'SUSPENDED', reason: 'teste' }, root);
     expect(slugs(await find('')) ).not.toContain('festival-de-maputo');
-    await call('POST', `/orgs/${orgA.id}/status`, { status: 'ACTIVE' }, root);
+    await call('POST', `/orgs/${orgA.id}/status`, { status: 'ACTIVE', skipDocs: true }, root);
     expect(slugs(await find(''))).toContain('festival-de-maputo');
   });
 
@@ -1190,6 +1190,98 @@ describe('Bilhete+ API — critérios de aceitação', () => {
     expect((await call('GET', `/public/tickets/${newTok}`)).status).toBe(404);
     await db.query(`UPDATE tickets SET status='USED' WHERE id=$1`, [t0.id]);
     expect((await call('POST', `/account/tickets/${t0.id}/share`, {}, a1)).status).toBe(409); // depois de usado já não se partilha
+  });
+
+  it('SMS: bilhetes confirmados e lembrete 24 h chegam por SMS a quem entra só com telemóvel', async () => {
+    const ev = (await call('POST', '/events', { name: 'Festival SMS', location: 'Maputo', startsAt: '2033-01-01T10:00:00Z', endsAt: '2033-01-01T22:00:00Z' }, S.adminA)).body;
+    await call('POST', `/events/${ev.id}/publish`, {}, S.adminA);
+    const tt = (await call('POST', `/events/${ev.id}/ticket-types`, { name: 'Geral', priceMinor: MT(50), quantity: 5 }, S.adminA)).body.id;
+    await call('POST', '/account/phone/start', { phone: '84 111 9988' });
+    const code = /\b(\d{6})\b/.exec([...smsSent].reverse().find((m) => m.to === '+258841119988')!.text)![1];
+    const acc = (await call('POST', '/account/phone/verify', { phone: '84 111 9988', code, name: 'Rui SMS' })).body.token;
+    const o = await buyTicket(ev.subdomain, { items: [{ ticketTypeId: tt, qty: 1 }] }, acc);
+    smsSent.length = 0;
+    await webhook({ id: 'evt-sms-' + o.body.orderId, type: 'payment.succeeded', kind: 'ORDER', ref: o.body.orderId }); await appInst.drain();
+    const conf = smsSent.find((m) => m.to === '+258841119988');
+    expect(conf?.text).toMatch(/Festival SMS/);
+    expect(conf?.text).toMatch(/\/t\/[\w-]{10,}/); // link do bilhete
+    // lembrete 24 h antes, sem notificações no aparelho: por SMS (uma só vez)
+    await db.query(`UPDATE events SET starts_at=now()+interval '20 hours', ends_at=now()+interval '30 hours' WHERE id=$1`, [ev.id]);
+    smsSent.length = 0;
+    await appInst.runPushReminders(); await appInst.drain();
+    expect(smsSent.some((m) => m.to === '+258841119988' && /amanha/.test(m.text))).toBe(true);
+    smsSent.length = 0;
+    await appInst.runPushReminders(); await appInst.drain();
+    expect(smsSent).toHaveLength(0);
+  });
+
+  it('empresa suspensa (bilhetes desativados), apagar empresa, eliminar evento, credenciais, regra de documentos e lotação', async () => {
+    const root = await login('root@bilhete.test');
+    // --- empresa nova, activa, com um evento publicado e um bilhete pago ---
+    const org = (await call('POST', '/orgs', { legalName: 'Susp Lda', tradeName: 'Susp', nuit: '500000001', adminEmail: 'admin@susp.test', adminName: 'S', adminPassword: 'pw123456' }, root)).body;
+    const adm = await login('admin@susp.test');
+    const ev = (await call('POST', '/events', { name: 'Festival Suspenso', location: 'Maputo', startsAt: '2034-01-01T10:00:00Z', endsAt: '2034-01-01T22:00:00Z' }, adm)).body;
+    await call('POST', `/events/${ev.id}/publish`, {}, adm);
+    const tt = (await call('POST', `/events/${ev.id}/ticket-types`, { name: 'Geral', priceMinor: MT(50), quantity: 3 }, adm)).body.id;
+    const acc = (await call('POST', '/account/register', { name: 'Cli Susp', email: 'cli@susp.test', password: 'pw-cli-12345' })).body.token;
+    const o = await buyTicket(ev.subdomain, { items: [{ ticketTypeId: tt, qty: 1 }] }, acc);
+    await webhook({ id: 'evt-susp-' + o.body.orderId, type: 'payment.succeeded', kind: 'ORDER', ref: o.body.orderId });
+    const tok = (await call('GET', '/account/orders', undefined, acc)).body[0].tickets[0].token;
+    expect((await call('GET', `/public/tickets/${tok}`)).status).toBe(200);
+    // --- suspender: o evento sai da plataforma; o bilhete continua na conta, mas desativado ---
+    expect((await call('POST', `/orgs/${org.id}/status`, { status: 'SUSPENDED', reason: 'teste' }, root)).status).toBe(200);
+    expect((await call('GET', `/public/events/${ev.subdomain}`)).status).toBe(404);
+    expect((await call('GET', '/public/events?q=Suspenso')).body.items.length).toBe(0);
+    const off = (await call('GET', '/account/orders', undefined, acc)).body[0];
+    expect(off.inactive).toBe(true);
+    expect(off.tickets[0].token).toBeNull();
+    expect((await call('GET', `/public/tickets/${tok}`)).status).toBe(403);
+    expect((await call('GET', '/platform/events', undefined, root)).body.find((e: any) => e.id === ev.id).org_status).toBe('SUSPENDED');
+    // --- reactivar: tudo volta ---
+    expect((await call('POST', `/orgs/${org.id}/status`, { status: 'ACTIVE', skipDocs: true }, root)).status).toBe(200);
+    expect((await call('GET', `/public/events/${ev.subdomain}`)).status).toBe(200);
+    expect((await call('GET', `/public/tickets/${tok}`)).status).toBe(200);
+    // --- eliminar evento: motivo obrigatório; com vendas recusa; sem vendas elimina e esconde ---
+    expect((await call('POST', `/events/${ev.id}/delete`, { reason: 'x' }, adm)).status).toBe(400);
+    expect((await call('POST', `/events/${ev.id}/delete`, { reason: 'engano de teste' }, adm)).status).toBe(409);
+    const spare = (await call('POST', '/events', { name: 'Evento Engano', startsAt: '2034-02-01T10:00:00Z', endsAt: '2034-02-01T22:00:00Z' }, adm)).body;
+    expect((await call('POST', `/events/${spare.id}/delete`, { reason: 'criado por engano' }, adm)).status).toBe(200);
+    expect((await call('GET', '/events', undefined, adm)).body.some((e: any) => e.id === spare.id)).toBe(false);
+    expect((await call('POST', `/events/${spare.id}/delete`, { reason: 'outra vez' }, adm)).status).toBe(404);
+    // --- credenciais: emitir, nunca à venda, entrar e sair, cancelar ---
+    const cred = await call('POST', `/events/${ev.id}/credentials`, { name: 'Maria Staff', category: 'Staff' }, adm);
+    expect(cred.status).toBe(200);
+    expect(cred.body.link).toMatch(/\/t\//);
+    expect((await call('GET', `/public/events/${ev.subdomain}`)).body.ticketTypes.map((t: any) => t.name)).toEqual(['Geral']);
+    expect((await call('POST', `/events/${ev.id}/credentials`, { name: 'X', category: 'Staff', contact: 'lixo' }, adm)).status).toBe(400);
+    expect((await call('GET', `/events/${ev.id}/credentials`, undefined, adm)).body.items).toHaveLength(1);
+    expect((await call('POST', '/users', { name: 'Porta', email: 'porta@susp.test', password: 'pw123456', role: 'GATE_OPERATOR' }, adm)).status).toBe(200);
+    const gate = await login('porta@susp.test');
+    const scan = (token: string, direction: 'IN' | 'OUT' = 'IN') => call('POST', `/events/${ev.id}/scan`, { token, direction }, gate);
+    const ctok = cred.body.link.split('/t/')[1];
+    expect((await scan(ctok)).body.result).toBe('VALID');
+    const st = (await call('GET', `/events/${ev.id}/gate-stats`, undefined, adm)).body;
+    expect(st.inside).toBe(1);
+    expect(st.capacity).toBe(3); // a credencial não conta para a capacidade
+    // lotação: com 3 dentro (capacidade 3) há alerta de lotação
+    await db.query(`UPDATE tickets SET inside=true WHERE event_id=$1`, [ev.id]);
+    await db.query(`INSERT INTO tickets(id,event_id,order_id,ticket_type_id,token_hash,format,status,short_code,inside) SELECT gen_random_uuid(),event_id,order_id,ticket_type_id,md5(random()::text),'DIGITAL','ISSUED','ZZZZZZZ'||g,true FROM tickets t, generate_series(1,2) g WHERE t.id=$1`, [(await db.query<any>(`SELECT id FROM tickets WHERE event_id=$1 AND ticket_type_id=$2 LIMIT 1`, [ev.id, tt])).rows[0].id]);
+    const alerts = (await call('GET', `/events/${ev.id}/alerts`, undefined, adm)).body.map((a: any) => a.text).join(' | ');
+    expect(alerts).toMatch(/Lotação/);
+    expect((await call('POST', `/tickets/${cred.body.id}/cancel`, { reason: 'fim de contrato' }, adm)).status).toBe(200);
+    expect((await scan(ctok, 'OUT')).body.result).toBe('EXIT_OK'); // quem estava dentro pode sempre sair
+    // --- regra de documentos para aprovar ---
+    const pend = (await call('POST', '/orgs', { legalName: 'Sem Docs Lda', tradeName: 'Sem Docs', nuit: '500000002', adminEmail: 'admin@semdocs.test', adminName: 'S', adminPassword: 'pw123456', activate: false }, root)).body;
+    expect((await call('POST', `/orgs/${pend.id}/status`, { status: 'ACTIVE' }, root)).status).toBe(409);
+    // --- apagar empresa: com vendas recusa; sem vendas arquiva e liberta NUIT e e-mails ---
+    expect((await call('POST', `/orgs/${org.id}/delete`, { reason: 'teste' }, root)).status).toBe(409);
+    expect((await call('POST', `/orgs/${pend.id}/delete`, { reason: 'x' }, root)).status).toBe(400);
+    expect((await call('POST', `/orgs/${pend.id}/delete`, { reason: 'registo duplicado' }, root)).status).toBe(200);
+    expect((await call('GET', '/orgs', undefined, root)).body.some((x: any) => x.id === pend.id)).toBe(false);
+    const again = await call('POST', '/public/register', { legalName: 'Sem Docs Lda', tradeName: 'Sem Docs', nuit: '500000002', contactName: 'S', email: 'admin@semdocs.test', password: 'pw-12345678', acceptTerms: true });
+    expect(again.status).toBe(200);
+    const acts = (await db.query<any>(`SELECT action FROM audit_logs WHERE action IN ('org.delete','event.delete','credential.issue')`)).rows.map((x: any) => x.action);
+    for (const a of ['org.delete', 'event.delete', 'credential.issue']) expect(acts).toContain(a);
   });
 
   it('auditoria: operações sensíveis ficam registadas', async () => {

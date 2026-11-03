@@ -328,9 +328,15 @@ Bilhete+` });
     if (!['PENDING', 'ACTIVE', 'REJECTED', 'SUSPENDED', 'DISABLED'].includes(status)) throw new HttpError(400, 'estado inválido');
     const reason = typeof req.body.reason === 'string' ? req.body.reason.trim().slice(0, 300) : null;
     if ((status === 'REJECTED' || status === 'SUSPENDED') && !reason) throw new HttpError(400, 'indique o motivo');
+    // aprovar exige documentos anexados, salvo decisão expressa da administração (fica na auditoria)
+    const skipDocs = status === 'ACTIVE' && req.body.skipDocs === true;
+    if (status === 'ACTIVE') {
+      const docs = (await db.query<any>('SELECT count(*)::int AS n FROM org_documents WHERE organization_id=$1', [req.params.id])).rows[0].n;
+      if (docs === 0 && !skipDocs) throw new HttpError(409, 'a empresa ainda não anexou documentos: peça-os ou aprove sem documentos (decisão registada)');
+    }
     const r = await db.query('UPDATE organizations SET status=$2,status_reason=$3,reviewed_by=$4,reviewed_at=now() WHERE id=$1 RETURNING id', [req.params.id, status, reason, req.user!.id]);
     if (!r.rows[0]) throw new HttpError(404, 'empresa não encontrada');
-    await audit(db, req.user, 'org.status', 'organization', req.params.id, { status, reason });
+    await audit(db, req.user, 'org.status', 'organization', req.params.id, { status, reason, ...(skipDocs ? { skipDocs: true } : {}) });
     const o = (await db.query<any>(`SELECT o.slug,o.trade_name,COALESCE(o.billing_email,(SELECT email FROM users WHERE organization_id=o.id AND role='ORG_ADMIN' ORDER BY created_at LIMIT 1)) AS to_email FROM organizations o WHERE o.id=$1`, [req.params.id])).rows[0];
     const link = `${cfg.publicUrl ?? ''}/company/${o.slug}`;
     const msg: Record<string, [string, string] | undefined> = {
@@ -435,6 +441,13 @@ Bilhete+` });
     }
     return ok;
   };
+  /** SMS fora da transacção: não atrasa nem derruba a compra; falhas só ficam no registo. */
+  const smsAsync = (to: string | null | undefined, text: string) => {
+    const phone = to ? normalizePhone(to) : null;
+    if (!cfg.sms || !phone) return;
+    const p = cfg.sms.send(phone, text).catch((e) => console.error('sms', String(e?.message ?? e).slice(0, 160))).finally(() => inflight.delete(p));
+    inflight.add(p);
+  };
   const pushAsync = (fn: () => Promise<unknown>) => { if (!cfg.push) return; const p = fn().catch((e) => console.error('push', e)).finally(() => inflight.delete(p)); inflight.add(p); };
   app.get('/public/push/config', h(async () => ({ publicKey: cfg.push?.publicKey ?? null })));
   /** Regista (ou actualiza) a subscrição deste aparelho; se houver sessão de conta, fica ligada a ela. */
@@ -463,7 +476,7 @@ Bilhete+` });
   }));
   /** Lembrete 24 h antes: quem tem bilhete para um evento que começa dentro de ~24 h recebe um aviso (uma só vez). */
   const runPushReminders = async () => {
-    if (!cfg.push) return 0;
+    if (!cfg.push && !cfg.sms) return 0;
     const rows = (await db.query<any>(`SELECT DISTINCT o.account_id, e.id AS event_id, e.name, e.starts_at, e.location, d.subdomain
         FROM ticket_orders o JOIN tickets t ON t.order_id=o.id AND t.status IN ('ISSUED','USED') JOIN events e ON e.id=o.event_id LEFT JOIN event_domains d ON d.event_id=e.id
        WHERE o.account_id IS NOT NULL AND e.status='PUBLISHED' AND (SELECT og.status FROM organizations og WHERE og.id=e.organization_id)='ACTIVE' AND e.deleted_at IS NULL AND e.starts_at > now() AND e.starts_at <= now() + interval '24 hours'
@@ -472,7 +485,12 @@ Bilhete+` });
     for (const r of rows) {
       await db.query(`INSERT INTO push_sent(account_id,event_id,kind) VALUES($1,$2,'reminder24h') ON CONFLICT DO NOTHING`, [r.account_id, r.event_id]);
       const subs = (await db.query<any>(`SELECT endpoint,p256dh,auth FROM push_subscriptions WHERE account_id=$1 AND 'tickets' = ANY(topics)`, [r.account_id])).rows;
-      n += await sendPush(subs, { title: 'O seu evento é amanhã', body: `${r.name}${r.location ? ' · ' + r.location : ''}. Tenha o bilhete à mão.`, url: pushUrl('/account'), tag: 'reminder-' + r.event_id });
+      const sent = await sendPush(subs, { title: 'O seu evento é amanhã', body: `${r.name}${r.location ? ' · ' + r.location : ''}. Tenha o bilhete à mão.`, url: pushUrl('/account'), tag: 'reminder-' + r.event_id });
+      n += sent;
+      if (sent === 0 && cfg.sms) { // sem notificações no aparelho: lembrete por SMS (só a quem tem número)
+        const ph = (await db.query<any>(`SELECT COALESCE(phone_e164,phone) AS p FROM accounts WHERE id=$1`, [r.account_id])).rows[0]?.p;
+        if (ph) { smsAsync(ph, `Bilhete+: ${String(r.name).slice(0, 50)} e amanha${r.location ? ' em ' + String(r.location).slice(0, 40) : ''}. Tenha o bilhete a mao: ${cfg.publicUrl ?? 'https://bilhetemais.live'}/account`); n++; }
+      }
     }
     return n;
   };
@@ -493,6 +511,38 @@ Bilhete+` });
       await sendPush(subs, { title: 'Novo evento no Bilhete+', body: `${ev.name}${ev.location ? ' · ' + ev.location : ''} · ${new Date(ev.starts_at).toLocaleDateString('pt-MZ', { day: 'numeric', month: 'long' })}`, url: eventAddress(ev.subdomain), tag: 'event-' + req.params.id });
     });
     return { status: 'PUBLISHED' };
+  }));
+  // ---------- credenciais: bilhetes a custo zero para staff, fornecedores, imprensa e convidados ----------
+  const CRED_CATEGORIES = ['Staff', 'Fornecedor', 'Imprensa', 'Convidado'];
+  /** Emite uma credencial nominal. O titular recebe o link por e-mail ou SMS (se o contacto for indicado); entra pela mesma portaria. */
+  app.post('/events/:id/credentials', ...staff('ORG_ADMIN'), h(async (req) => {
+    const ev = await eventFor(req.user!, req.params.id);
+    const name = str(req.body?.name, 'nome').slice(0, 120);
+    const category = (typeof req.body?.category === 'string' && req.body.category.trim() ? req.body.category.trim() : 'Staff').slice(0, 40);
+    const contact = typeof req.body?.contact === 'string' ? req.body.contact.trim().slice(0, 200) : '';
+    const isMail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact), phone = !isMail && contact ? normalizePhone(contact) : null;
+    if (contact && !isMail && !phone) throw new HttpError(400, 'contacto inválido: indique um e-mail ou um telemóvel');
+    const r = await db.transaction(async (tx) => {
+      let type = (await tx.query<any>(`SELECT id FROM ticket_types WHERE event_id=$1 AND credential AND lower(name)=lower($2)`, [ev.id, category])).rows[0];
+      if (!type) type = (await tx.query<any>(`INSERT INTO ticket_types(event_id,name,kind,price_minor,quantity,credential) VALUES($1,$2,$3,0,0,true) RETURNING id`, [ev.id, category, ({ staff: 'STAFF', imprensa: 'PRESS', convidado: 'GUEST' } as Record<string, string>)[category.toLowerCase()] ?? 'GENERAL'])).rows[0];
+      const o = (await tx.query<any>(`INSERT INTO ticket_orders(event_id,channel,buyer_name,buyer_contact,total_minor,status) VALUES($1,'COUNTER',$2,$3,0,'PAID') RETURNING id`, [ev.id, name, isMail ? contact.toLowerCase() : phone])).rows[0];
+      const id = randomUUID();
+      await tx.query(`INSERT INTO tickets(id,event_id,order_id,ticket_type_id,token_hash,format,status,short_code) VALUES($1,$2,$3,$4,$5,'DIGITAL','PENDING',$6)`, [id, ev.id, o.id, type.id, hashToken(tokenFor(id)), await freshShortCode(tx, ev.id)]);
+      await issueOrder(tx, o.id); // emite; o SMS segue sozinho se houver telemóvel
+      if (isMail) {
+        const base = cfg.publicUrl ?? 'https://bilhetemais.live';
+        await queueMail(db, cfg.mailer ?? null, tx, { to: contact.toLowerCase(), subject: `A sua credencial — ${ev.name}`, text: `Olá ${name},\n\nA sua credencial (${category}) para ${ev.name} está pronta.\nAbra este link à entrada: ${base}/t/${tokenFor(id)}\n\nBilhete+` });
+      }
+      await audit(tx, req.user, 'credential.issue', 'ticket', id, { event: ev.id, category, name });
+      return { id, link: `${cfg.publicUrl ?? ''}/t/${tokenFor(id)}`, shortCode: (await tx.query<any>('SELECT short_code FROM tickets WHERE id=$1', [id])).rows[0].short_code };
+    });
+    return { ...r, category, name };
+  }));
+  app.get('/events/:id/credentials', ...staff('ORG_ADMIN'), h(async (req) => {
+    const ev = await eventFor(req.user!, req.params.id);
+    const rows = (await db.query<any>(`SELECT t.id,t.status,t.inside,t.short_code,t.used_at,tt.name AS category,o.buyer_name AS name,o.buyer_contact AS contact,o.created_at
+        FROM tickets t JOIN ticket_types tt ON tt.id=t.ticket_type_id AND tt.credential JOIN ticket_orders o ON o.id=t.order_id WHERE t.event_id=$1 ORDER BY o.created_at DESC`, [ev.id])).rows;
+    return { categories: CRED_CATEGORIES, items: rows.map((r: any) => ({ ...r, link: `${cfg.publicUrl ?? ''}/t/${tokenFor(r.id)}` })) };
   }));
   app.post('/events/:id/ticket-types', ...staff('ORG_ADMIN'), h(async (req) => {
     await eventFor(req.user!, req.params.id);
@@ -534,7 +584,7 @@ Bilhete+` });
     for (const it of items) {
       const qty = Number(it.qty);
       if (!Number.isInteger(qty) || qty < 1 || qty > 20) throw new HttpError(400, 'quantidade inválida');
-      const t = await tx.query<any>('SELECT id,price_minor,quantity FROM ticket_types WHERE id=$1 AND event_id=$2 FOR UPDATE', [it.ticketTypeId, ev.id]);
+      const t = await tx.query<any>('SELECT id,price_minor,quantity FROM ticket_types WHERE id=$1 AND event_id=$2 AND NOT credential FOR UPDATE', [it.ticketTypeId, ev.id]);
       if (!t.rows[0]) throw new HttpError(404, 'tipo de bilhete não encontrado');
       const sold = await tx.query<any>(`SELECT count(*)::int AS c FROM tickets WHERE ticket_type_id=$1 AND status<>'REVOKED'`, [t.rows[0].id]);
       if (sold.rows[0].c + qty > t.rows[0].quantity) throw new HttpError(409, 'bilhetes esgotados');
@@ -563,6 +613,12 @@ Bilhete+` });
     // e-mail automático com os bilhetes (para compras com conta; compras de balcão têm telefone, não e-mail)
     const o = (await tx.query<any>('SELECT o.buyer_name,o.buyer_contact,o.channel,o.account_id,e.name AS event FROM ticket_orders o JOIN events e ON e.id=o.event_id WHERE o.id=$1', [orderId])).rows[0];
     if (ts.rows.length && o?.account_id) pushAsync(async () => { await new Promise((r) => setTimeout(r, 300)); const subs = (await db.query<any>(`SELECT endpoint,p256dh,auth FROM push_subscriptions WHERE account_id=$1 AND 'tickets' = ANY(topics)`, [o.account_id])).rows; await sendPush(subs, { title: 'Bilhetes confirmados', body: `${o.event}: os seus bilhetes já estão na app.`, url: pushUrl('/account'), tag: 'order-' + orderId }); });
+    // SMS com o link (contas de telemóvel e vendas de balcão com número): o bilhete chega mesmo sem e-mail
+    if (ts.rows.length && cfg.sms && o && !/@/.test(o.buyer_contact ?? '') && normalizePhone(o.buyer_contact ?? '')) {
+      const base = cfg.publicUrl ?? 'https://bilhetemais.live';
+      if (o.account_id) smsAsync(o.buyer_contact, `Bilhete+: ${ts.rows.length > 1 ? ts.rows.length + ' bilhetes prontos' : 'bilhete pronto'} para ${String(o.event).slice(0, 40)}. Veja em ${base}/account` + (ts.rows.length === 1 ? ` ou ${base}/t/${tokenFor(ts.rows[0].id)}` : ''));
+      else for (const t of ts.rows.slice(0, 5)) smsAsync(o.buyer_contact, `Bilhete+: o seu bilhete para ${String(o.event).slice(0, 40)}: ${base}/t/${tokenFor(t.id)}`);
+    }
     if (ts.rows.length && o?.channel === 'ONLINE' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(o.buyer_contact ?? '')) {
       const base = cfg.publicUrl ?? 'https://bilhetemais.live';
       const text = [`Olá ${o.buyer_name},`, '', `Os seus bilhetes para ${o.event} estão prontos.`, '', 'Abra o link à entrada (serve também de carteira):', '',
@@ -621,7 +677,7 @@ Bilhete+` });
     const ev = await publicEvent(req.params.sub);
     const types = await db.query<any>(
       `SELECT t.id,t.name,t.kind,t.price_minor,t.quantity-(SELECT count(*) FROM tickets k WHERE k.ticket_type_id=t.id AND k.status<>'REVOKED')::int AS available
-         FROM ticket_types t WHERE t.event_id=$1`, [ev.id]);
+         FROM ticket_types t WHERE t.event_id=$1 AND NOT t.credential`, [ev.id]);
     return { name: ev.name, description: ev.description, startsAt: ev.starts_at, endsAt: ev.ends_at, ticketTypes: types.rows, location: ev.location, mapUrl: ev.map_url, lat: ev.latitude === null ? null : Number(ev.latitude), lng: ev.longitude === null ? null : Number(ev.longitude), ...(await eventBrand(ev)), settings: publicSettings((await settingsOf(db, ev)).effective),
       gallery: (await db.query<any>('SELECT id,caption FROM event_images WHERE event_id=$1 ORDER BY position,created_at', [ev.id])).rows,
       programme: (await db.query<any>('SELECT id,title,starts_at,ends_at,stage,description FROM event_sessions WHERE event_id=$1 ORDER BY starts_at', [ev.id])).rows };
@@ -938,6 +994,18 @@ Bilhete+` });
     if (!r) throw new HttpError(404, 'bilhete não encontrado');
     return r as { id: string; status: string };
   };
+  /** Extrato completo da carteira de um bilhete (todos os movimentos): para quem o comprou ou quem o recebeu por partilha. */
+  app.get('/account/tickets/:id/statement', h(async (req) => {
+    const a = await needAccount(req as Request);
+    if (!/^[0-9a-f-]{36}$/.test(req.params.id)) throw new HttpError(404, 'bilhete não encontrado');
+    const t = (await db.query<any>(`SELECT t.id,t.wallet_id,e.name AS event,tt.name AS type_name,t.nickname FROM tickets t JOIN events e ON e.id=t.event_id LEFT JOIN ticket_types tt ON tt.id=t.ticket_type_id
+        WHERE t.id=$1 AND (EXISTS (SELECT 1 FROM ticket_orders o WHERE o.id=t.order_id AND o.account_id=$2 AND NOT EXISTS (SELECT 1 FROM ticket_shares s WHERE s.ticket_id=t.id AND s.revoked_at IS NULL AND s.claimed_at IS NOT NULL))
+          OR EXISTS (SELECT 1 FROM ticket_shares s WHERE s.ticket_id=t.id AND s.to_account_id=$2 AND s.revoked_at IS NULL))`, [req.params.id, a.id])).rows[0];
+    if (!t) throw new HttpError(404, 'bilhete não encontrado');
+    const rows = t.wallet_id ? (await db.query<any>(`SELECT l.id,l.type,l.amount_minor,l.created_at,m.name AS merchant,ms.items
+        FROM wallet_ledger_entries l LEFT JOIN merchants m ON m.id=l.merchant_id LEFT JOIN merchant_sales ms ON ms.ledger_entry_id=l.id WHERE l.wallet_id=$1 ORDER BY l.created_at,l.id`, [t.wallet_id])).rows : [];
+    return { event: t.event, type: t.type_name, nickname: t.nickname, balanceMinor: t.wallet_id ? (await wallet.balanceOf(t.wallet_id)).toString() : '0', movements: rows };
+  }));
   /** Apelido de cada bilhete («Ana», «Pai»…), só visível a quem o tem na conta. */
   app.patch('/account/tickets/:id', h(async (req) => {
     const a = await needAccount(req as Request);
@@ -1456,7 +1524,7 @@ Bilhete+` });
       })()),
       settings: await (async () => { const r = await settingsOf(db, ev); return { own: ev.settings, effective: r.effective, sources: r.sources, defaults: DEFAULTS }; })(),
       parent: ev.parent_event_id ? ((await db.query<any>('SELECT id,name FROM events WHERE id=$1', [ev.parent_event_id])).rows[0] ?? null) : null,
-      ticketTypes: await q(`SELECT t.id,t.name,t.kind,t.price_minor,t.quantity,(SELECT count(*) FROM tickets k WHERE k.ticket_type_id=t.id AND k.status<>'REVOKED')::int AS sold FROM ticket_types t WHERE t.event_id=$1 ORDER BY t.name`),
+      ticketTypes: await q(`SELECT t.id,t.name,t.kind,t.price_minor,t.quantity,(SELECT count(*) FROM tickets k WHERE k.ticket_type_id=t.id AND k.status<>'REVOKED')::int AS sold FROM ticket_types t WHERE t.event_id=$1 AND NOT t.credential ORDER BY t.name`),
       merchants: await q(`SELECT m.id,m.name,COALESCE((SELECT json_agg(json_build_object('id',p.id,'name',p.name,'price_minor',p.price_minor) ORDER BY p.name) FROM products p WHERE p.merchant_id=m.id AND p.active),'[]') AS products FROM merchants m WHERE m.event_id=$1 ORDER BY m.name`),
       gates: await q('SELECT id,name FROM access_gates WHERE event_id=$1 ORDER BY name'),
       refundRequests: await q(`SELECT r.id,r.amount_minor,r.status,r.created_at FROM refund_requests r JOIN wallets w ON w.id=r.wallet_id WHERE w.event_id=$1 ORDER BY r.created_at DESC LIMIT 50`),
@@ -1464,7 +1532,7 @@ Bilhete+` });
   }));
   app.get('/events/:id/ticket-types', ...staff('CASHIER'), h(async (req) => {
     const ev = await eventFor(req.user!, req.params.id);
-    return (await db.query(`SELECT t.id,t.name,t.price_minor,t.quantity-(SELECT count(*) FROM tickets k WHERE k.ticket_type_id=t.id AND k.status<>'REVOKED')::int AS available FROM ticket_types t WHERE t.event_id=$1 ORDER BY t.name`, [ev.id])).rows;
+    return (await db.query(`SELECT t.id,t.name,t.price_minor,t.quantity-(SELECT count(*) FROM tickets k WHERE k.ticket_type_id=t.id AND k.status<>'REVOKED')::int AS available FROM ticket_types t WHERE t.event_id=$1 AND NOT t.credential ORDER BY t.name`, [ev.id])).rows;
   }));
   app.get('/events/:id/gates', ...staff('GATE_OPERATOR'), h(async (req) => {
     const ev = await eventFor(req.user!, req.params.id);
@@ -1763,7 +1831,7 @@ Bilhete+` });
   }));
   /** Copia a estrutura (tipos de bilhete, portas, comerciantes e produtos) de outro evento da mesma empresa. */
   const copyStructure = async (tx: Tx, fromId: string, toId: string, what: string[]) => {
-    if (what.includes('ticketTypes')) await tx.query('INSERT INTO ticket_types(event_id,name,kind,price_minor,quantity) SELECT $2,name,kind,price_minor,quantity FROM ticket_types WHERE event_id=$1', [fromId, toId]);
+    if (what.includes('ticketTypes')) await tx.query('INSERT INTO ticket_types(event_id,name,kind,price_minor,quantity) SELECT $2,name,kind,price_minor,quantity FROM ticket_types WHERE event_id=$1 AND NOT credential', [fromId, toId]);
     if (what.includes('gates')) await tx.query('INSERT INTO access_gates(event_id,name) SELECT $2,name FROM access_gates WHERE event_id=$1', [fromId, toId]);
     if (what.includes('merchants')) {
       const ms = await tx.query<any>('SELECT id,name FROM merchants WHERE event_id=$1', [fromId]);
@@ -2056,6 +2124,10 @@ Bilhete+` });
     if (unauth >= 5) alerts.push({ level: 'warn', text: `${unauth} leituras recusadas (não autorizado/revogado) na última hora.` });
     const conflicts = (await q(`SELECT count(*)::int AS n FROM entry_scans WHERE event_id=$1 AND offline AND result IN ('ALREADY_USED','ALREADY_INSIDE')`))[0].n;
     if (conflicts > 0) alerts.push({ level: 'warn', text: `${conflicts} leituras offline em conflito (bilhete já tinha sido usado noutra porta).` });
+    // lotação: perto ou acima da capacidade (pessoas dentro agora / lotação do evento)
+    const occ = (await q(`SELECT (SELECT count(*)::int FROM tickets WHERE event_id=$1 AND inside) AS inside, (SELECT COALESCE(sum(quantity),0)::int FROM ticket_types WHERE event_id=$1) AS capacity`))[0];
+    if (occ.capacity > 0 && occ.inside >= occ.capacity) alerts.push({ level: 'bad', text: `Lotação esgotada: ${occ.inside} pessoas dentro (capacidade ${occ.capacity}).` });
+    else if (occ.capacity > 0 && occ.inside >= Math.ceil(occ.capacity * 0.9)) alerts.push({ level: 'warn', text: `Lotação quase cheia: ${occ.inside} de ${occ.capacity} (${Math.round((occ.inside / occ.capacity) * 100)}%).` });
     const out = (await q(`SELECT count(*)::int AS n FROM refund_requests r JOIN wallets w ON w.id=r.wallet_id WHERE w.event_id=$1 AND r.status='PENDING'`))[0].n;
     if (out > 0) alerts.push({ level: 'warn', text: `${out} pedidos de reembolso a aguardar decisão.` });
     const owed = (await settlementsOf(ev)).reduce((s, r) => s + r.outstandingMinor, 0n);
@@ -2085,13 +2157,13 @@ Bilhete+` });
     if (when === 'today') where.push(`e.starts_at < date_trunc('day', now()) + interval '1 day'`);
     else if (when === 'week') where.push(`e.starts_at < now() + interval '7 days'`);
     else if (when === 'month') where.push(`e.starts_at < now() + interval '30 days'`);
-    if (req.query.free === '1') where.push(`EXISTS (SELECT 1 FROM ticket_types t WHERE t.event_id=e.id) AND NOT EXISTS (SELECT 1 FROM ticket_types t WHERE t.event_id=e.id AND t.price_minor>0)`);
+    if (req.query.free === '1') where.push(`EXISTS (SELECT 1 FROM ticket_types t WHERE t.event_id=e.id AND NOT t.credential) AND NOT EXISTS (SELECT 1 FROM ticket_types t WHERE t.event_id=e.id AND NOT t.credential AND t.price_minor>0)`);
     const limitN = Math.min(Math.max(Number(req.query.limit) || 12, 1), 24);
     const offset = Math.max(Number(req.query.offset) || 0, 0);
     const baseSql = `FROM events e JOIN event_domains d ON d.event_id=e.id JOIN organizations o ON o.id=e.organization_id WHERE ${where.join(' AND ')}`;
     const rows = (await db.query<any>(
       `SELECT e.name,e.starts_at,e.ends_at,e.location,e.category,e.latitude,e.longitude,d.subdomain,o.trade_name AS organization,e.theme,
-              (SELECT min(t.price_minor) FROM ticket_types t WHERE t.event_id=e.id) AS min_price,
+              (SELECT min(t.price_minor) FROM ticket_types t WHERE t.event_id=e.id AND NOT t.credential) AS min_price,
               (SELECT max(a.updated_at) FROM brand_assets a WHERE a.event_id=e.id AND a.kind='cover') AS cover_at,
               (SELECT count(*) FROM event_images i WHERE i.event_id=e.id)::int AS gallery
          ${baseSql} ORDER BY e.starts_at ASC LIMIT ${limitN} OFFSET ${offset}`, params)).rows;

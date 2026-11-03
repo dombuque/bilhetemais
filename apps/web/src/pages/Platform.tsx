@@ -199,7 +199,8 @@ function Review({ id, onClose, toast }: { id: string; onClose: () => void; toast
   const { busy, run } = useAction(toast);
   const load = useCallback(() => api('GET', `/orgs/${id}`).then(setO), [id]);
   useEffect(() => { load(); }, [load]);
-  const decide = (status: string) => run(async () => { await api('POST', `/orgs/${id}/status`, { status, reason: reason || undefined }); await load(); setReason(''); }, 'Estado actualizado');
+  const [skipDocs, setSkipDocs] = useState(false);
+  const decide = (status: string) => run(async () => { await api('POST', `/orgs/${id}/status`, { status, reason: reason || undefined, ...(status === 'ACTIVE' && skipDocs ? { skipDocs: true } : {}) }); await load(); setReason(''); }, 'Estado actualizado');
   /** Os documentos exigem sessão: descarrega-se com o token e abre-se o ficheiro localmente. */
   const download = (d: any) => run(async () => {
     const r = await fetch(`/orgs/${id}/documents/${d.id}`, { headers: { authorization: 'Bearer ' + getToken() } });
@@ -225,8 +226,9 @@ function Review({ id, onClose, toast }: { id: string; onClose: () => void; toast
         <DeleteOrg id={id} name={o.trade_name} onDone={onClose} toast={toast} />
         {o.status_reason && <p className="muted">Último motivo: {o.status_reason}</p>}
         <Field label="Motivo (obrigatório para rejeitar ou suspender)"><input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ex.: NUIT não confere com a certidão" /></Field>
+        {o.status !== 'ACTIVE' && o.documents.length === 0 && <label className="inline small"><input type="checkbox" checked={skipDocs} onChange={(e) => setSkipDocs(e.target.checked)} /><span>A empresa não anexou documentos. Aprovar mesmo assim (fica registado na auditoria).</span></label>}
         <div className="inline">
-          {o.status !== 'ACTIVE' && <button disabled={busy} onClick={() => decide('ACTIVE')}><Icon n="check" />Aprovar</button>}
+          {o.status !== 'ACTIVE' && <button disabled={busy || (o.documents.length === 0 && !skipDocs)} onClick={() => decide('ACTIVE')}><Icon n="check" />Aprovar</button>}
           {o.status === 'PENDING' && <button className="danger ghost" disabled={busy || !reason.trim()} onClick={() => decide('REJECTED')}>Rejeitar</button>}
           {o.status === 'ACTIVE' && <button className="danger ghost" disabled={busy || !reason.trim()} onClick={() => decide('SUSPENDED')}>Suspender</button>}
         </div>

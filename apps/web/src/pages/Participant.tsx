@@ -3,6 +3,7 @@ import { accountApi, accountToken, dt, goTo, mainUrl, mt, onEventHost, setAccoun
 import { Empty, Icon, LangSwitch, Pill, Skeleton, useAction, useToast } from '../ui';
 import { AppTabs } from '../AppTabs';
 import { InstallButton, isStandalone, useInstall } from '../install';
+import { ReceiptModal } from './Receipt';
 import { disablePush, enablePush, pushActive, pushPermission, pushSupported, syncPush } from '../push';
 import './participant.css';
 
@@ -13,7 +14,12 @@ export function useAccount() {
   const [me, setMe] = useState<Me | null | undefined>(accountToken() ? undefined : null);
   const refresh = useCallback(() => {
     if (!accountToken()) { setMe(null); return; }
-    accountApi('GET', '/account/me').then((r) => setMe(r.account)).catch(() => { setAccountToken(null); setMe(null); });
+    accountApi('GET', '/account/me').then((r) => { setMe(r.account); try { localStorage.setItem('bp_me', JSON.stringify(r.account)); } catch { /* sem armazenamento */ } })
+      .catch((e) => {
+        if (e?.status === 401) { setAccountToken(null); setMe(null); return; } // sessão acabou
+        try { const c = JSON.parse(localStorage.getItem('bp_me') ?? 'null'); if (c) { setMe(c); return; } } catch { /* sem cópia */ } // sem rede: mantém a sessão com a última cópia
+        setMe(null);
+      });
   }, []);
   useEffect(() => { refresh(); }, [refresh]);
   return { me, refresh, logout: async () => { try { await accountApi('POST', '/account/logout', {}); } catch { /* já expirou */ } setAccountToken(null); setMe(null); } };
@@ -142,6 +148,14 @@ function Row({ icon, title, hint, open, onToggle, danger, children }: { icon: st
 const MV: Record<string, string> = { TOPUP: 'Carregamento', PAYMENT: 'Compra', REFUND: 'Devolução', CASHOUT: 'Levantamento', ADJUSTMENT: 'Ajuste' };
 const TICKET_STATE: Record<string, string> = { ISSUED: 'Válido', USED: 'Já utilizado', BLOCKED: 'Bloqueado', REVOKED: 'Cancelado', PENDING: 'A aguardar pagamento' };
 
+/** Extrato de um bilhete em CSV (abre no Excel): data, tipo, comerciante, itens e valor. */
+function downloadCsv(st: any) {
+  const q = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = [['Data', 'Tipo', 'Comerciante', 'Itens', 'Valor (MT)'], ...st.movements.map((m: any) => [new Date(m.created_at).toLocaleString('pt-PT'), MV[m.type] ?? m.type, m.merchant ?? '', Array.isArray(m.items) ? m.items.map((i: any) => `${i.qty} x ${i.name}`).join('; ') : '', (Number(BigInt(m.amount_minor)) / 100).toFixed(2).replace('.', ',')]), ['', '', '', 'Saldo atual', (Number(BigInt(st.balanceMinor)) / 100).toFixed(2).replace('.', ',')]];
+  const blob = new Blob(['\ufeff' + rows.map((r) => r.map(q).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `extrato-${String(st.event).toLowerCase().replace(/[^a-z0-9]+/g, '-')}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+}
+
 /** Um bilhete: tipo, estado, saldo da carteira, o que já gastou e o detalhe dos consumos. */
 function TicketCard({ t, n, total, shared, reload }: { t: any; n: number; total: number; shared?: boolean; reload: () => void }) {
   const toast = useToast();
@@ -149,6 +163,7 @@ function TicketCard({ t, n, total, shared, reload }: { t: any; n: number; total:
   const [editing, setEditing] = useState(false);
   const [nick, setNick] = useState(t.nickname ?? '');
   const [link, setLink] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<any>(null);
   const off = !!t.inactive; // empresa suspensa: o bilhete fica visível, mas desativado
   const gone = !!t.share?.claimed && !shared; // partilhado e aceite: já não funciona para quem o partilhou
   const bad = t.status === 'BLOCKED' || t.status === 'REVOKED';
@@ -192,11 +207,14 @@ function TicketCard({ t, n, total, shared, reload }: { t: any; n: number; total:
           <a className="pp-link" href={`https://wa.me/?text=${encodeURIComponent('Abra este link para receber o seu bilhete no Bilhete+: ' + link)}`} target="_blank" rel="noopener noreferrer">WhatsApp</a></span>
         <small>Quando a pessoa aceitar, o bilhete passa para a conta dela e deixa de funcionar para si. Só se pode partilhar antes de ser utilizado.</small></div>}
       {toast.node}
+      {receipt && <ReceiptModal r={receipt} onClose={() => setReceipt(null)} />}
+      {t.hasWallet && !off && <button type="button" className="pp-link" disabled={busy} onClick={() => run(async () => { const st = await accountApi('GET', `/account/tickets/${t.id}/statement`); downloadCsv(st); })}>Descarregar extrato (CSV)</button>}
       {t.usage?.length > 0 && <details className="pp-tk-use"><summary>Consumos e movimentos ({t.usage.length})</summary>
         <ul>{t.usage.map((u: any) => {
           const pos = BigInt(u.amount_minor) > 0n;
           return <li key={u.id}>
             <div className="between"><span><b>{u.merchant ?? MV[u.type] ?? u.type}</b><small>{u.merchant ? MV[u.type] + ' · ' : ''}{dt(u.created_at)}</small></span><span className={pos ? 'pos' : 'neg'}>{pos ? '+' : '−'}{mt(pos ? u.amount_minor : -BigInt(u.amount_minor))}</span></div>
+            {t.token && <button type="button" className="pp-link" disabled={busy} onClick={() => run(async () => { setReceipt(await fetch(`/public/tickets/${t.token}/receipts/${u.id}`).then((r) => { if (!r.ok) throw new Error('Comprovativo indisponível'); return r.json(); })); })}>Ver comprovativo</button>}
             {Array.isArray(u.items) && u.items.length > 0 && <p className="pp-tk-items">{u.items.map((i: any) => `${i.qty} × ${i.name}`).join(' · ')}</p>}
           </li>;
         })}</ul>
@@ -210,15 +228,19 @@ function TicketTabs({ orders, reload }: { orders: any[]; reload: () => void }) {
   const next = orders.filter((o) => !o.past).sort((a, b) => (a.status === 'PENDING_PAYMENT' ? 0 : 1) - (b.status === 'PENDING_PAYMENT' ? 0 : 1) || +new Date(a.starts_at) - +new Date(b.starts_at));
   const past = orders.filter((o) => o.past).sort((a, b) => +new Date(b.starts_at) - +new Date(a.starts_at));
   const [tab, setTab] = useState<'next' | 'past'>(next.length === 0 && past.length > 0 ? 'past' : 'next');
+  const [evFilter, setEvFilter] = useState('');
+  const events = [...new Set(orders.map((o) => o.event))];
+  const by = (l: any[]) => (evFilter ? l.filter((o) => o.event === evFilter) : l);
   return (
     <>
       <div className="pp-tabs" role="tablist" aria-label="Filtrar bilhetes">
         <button type="button" role="tab" aria-selected={tab === 'next'} className={tab === 'next' ? 'on' : ''} onClick={() => setTab('next')}>Próximos<span>{next.length}</span></button>
         <button type="button" role="tab" aria-selected={tab === 'past'} className={tab === 'past' ? 'on' : ''} onClick={() => setTab('past')}>Passados<span>{past.length}</span></button>
       </div>
+      {events.length > 1 && <label className="pp-field" style={{ marginBottom: 12 }}><span>Evento</span><select value={evFilter} onChange={(e) => setEvFilter(e.target.value)}><option value="">Todos os eventos</option>{events.map((e) => <option key={e} value={e}>{e}</option>)}</select></label>}
       {tab === 'next'
-        ? <OrderGroup items={next} empty="Sem eventos próximos. Veja os eventos e escolha o seu." reload={reload} />
-        : <OrderGroup items={past} empty="Ainda sem eventos passados." past reload={reload} />}
+        ? <OrderGroup items={by(next)} empty="Sem eventos próximos. Veja os eventos e escolha o seu." reload={reload} />
+        : <OrderGroup items={by(past)} empty="Ainda sem eventos passados." past reload={reload} />}
     </>
   );
 }
@@ -293,7 +315,16 @@ export function AccountPage({ view = 'tickets' }: { view?: 'tickets' | 'profile'
   const [prof, setProf] = useState({ name: '', phone: '' });
   const [pw, setPw] = useState({ current: '', next: '' });
   const [del, setDel] = useState('');
-  const load = useCallback(() => accountApi('GET', '/account/orders').then(setOrders).catch(() => setOrders([])), []);
+  const [offlineAt, setOfflineAt] = useState<string | null>(null);
+  const load = useCallback(() => accountApi('GET', '/account/orders').then((o) => {
+    setOrders(o); setOfflineAt(null);
+    try { localStorage.setItem('bp_orders', JSON.stringify({ d: o, at: new Date().toISOString() })); } catch { /* sem armazenamento */ }
+    // deixa cada bilhete pronto para abrir sem rede (QR e carteira): guarda a última cópia de cada um
+    for (const ord of o) for (const t of ord.tickets ?? []) if (t.token) fetch(`/public/tickets/${t.token}`).then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) { try { localStorage.setItem('bp_wallet_' + String(t.token).slice(0, 12), JSON.stringify({ d, at: new Date().toISOString() })); } catch { /* cheio */ } } }).catch(() => {});
+  }).catch((e) => {
+    if (e?.status === undefined) { try { const c = JSON.parse(localStorage.getItem('bp_orders') ?? 'null'); if (c) { setOrders(c.d); setOfflineAt(c.at); return; } } catch { /* sem cópia */ } }
+    setOrders([]);
+  }), []);
   useEffect(() => { if (me) { if (view === 'tickets') load(); setProf({ name: me.name, phone: me.phone ?? '' }); } }, [me, load, view]);
   const inst = useInstall();
   const [pushOn, setPushOn] = useState(false);
@@ -314,6 +345,7 @@ export function AccountPage({ view = 'tickets' }: { view?: 'tickets' | 'profile'
         {urlError && GOOGLE_ERRORS[urlError] && !me && <p className="pp-alert" role="alert">{GOOGLE_ERRORS[urlError]}</p>}
         {me === undefined ? <Skeleton rows={3} /> : me === null ? <AuthPanel onDone={refresh} next={location.pathname} intro="Entre para ver os seus bilhetes e o seu perfil." /> : <>
           {view === 'tickets' && (!orders ? <Skeleton rows={3} /> : orders.length === 0 ? <div className="pp-card"><Empty icon="ticket">Ainda não comprou bilhetes. <a href="/events">Ver eventos</a></Empty></div> : <>
+            {offlineAt && <p className="pp-alert" role="status">Sem ligação: a mostrar a última cópia dos seus bilhetes ({dt(offlineAt)}). Os QR guardados abrem sem rede.</p>}
             <TicketTabs orders={orders} reload={load} />
           </>)}
 
