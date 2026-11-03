@@ -14,6 +14,19 @@ export function normalizePhone(input: string, defaultCountry = '258'): string | 
 }
 
 export function smsFromEnv(env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch): Sms | null {
+  // smsserviceapi.com (fornecedor local): chave secreta + número nacional de 9 dígitos, resposta {enviada, mensagem}
+  if (env.SMSSERVICE_SECRET_KEY) {
+    const url = env.SMSSERVICE_URL || 'https://api.smsserviceapi.com/api/externa/send';
+    return {
+      async send(to, text) {
+        const national = to.replace(/^\+?258/, ''); // o fornecedor recebe 841234567, sem +258
+        const body = new URLSearchParams({ secretKey: env.SMSSERVICE_SECRET_KEY!, number: national, message: text });
+        const r = await fetchImpl(url, { method: 'POST', body, signal: AbortSignal.timeout(15_000) });
+        const j: any = await r.json().catch(() => ({}));
+        if (!r.ok || !j?.enviada) throw new Error('smsservice ' + r.status + (j?.mensagem ? ': ' + String(j.mensagem).slice(0, 120) : ''));
+      },
+    };
+  }
   // Twilio (SMS por conta e número ou serviço de mensagens)
   if (env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && (env.TWILIO_FROM || env.TWILIO_MESSAGING_SERVICE_SID)) {
     const url = `https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}/Messages.json`;
