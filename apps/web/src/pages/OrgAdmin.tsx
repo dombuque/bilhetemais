@@ -247,6 +247,12 @@ function EventAdmin({ id, back, toast, onOpen }: { id: string; back: () => void;
   if (!ov || !rep) return <Skeleton rows={5} />;
   const ev = ov.event;
   const url = eventShareUrl(ev.subdomain);
+  // Anunciar no Txillapp: abre o compositor de lá já com o texto e a ligação do evento (a pessoa revê e publica; nada é enviado sozinho).
+  const txillappPost = () => {
+    const when = dt(ev.starts_at);
+    const text = `${ev.name}${ev.location ? ` · ${ev.location}` : ''}\n${when}\nBilhetes à venda no Bilhete+.`;
+    return `https://txillapp.com/new/post?texto=${encodeURIComponent(text)}&link=${encodeURIComponent(url)}`;
+  };
 
   return (
     <>
@@ -255,7 +261,8 @@ function EventAdmin({ id, back, toast, onOpen }: { id: string; back: () => void;
         actions={<>
           {ev.status === 'PUBLISHED'
             ? <a className="btn ghost" href={inApp() ? eventUrl(ev.subdomain) : url} {...(inApp() ? {} : { target: '_blank', rel: 'noreferrer' })}>Ver página pública</a>
-            : <span className="muted small" style={{ alignSelf: 'center' }}>A página pública só abre depois de publicar.</span>}
+            : <span className="muted small" style={{ alignSelf: 'center' }}>A página pública só abre depois de publicar; depois poderá anunciá-lo no Txillapp.</span>}
+          {ev.status === 'PUBLISHED' && <a className="btn ghost" href={txillappPost()} target="_blank" rel="noreferrer">Publicar no Txillapp</a>}
           {ev.status !== 'PUBLISHED' && <button disabled={busy} onClick={() => act(() => api('POST', `/events/${id}/publish`, {}), 'Evento publicado')}>Publicar</button>}
         </>} />
       <div className="seg scroll" role="tablist" style={{ marginBottom: 18 }}>{TABS.map((t) => <button key={t} role="tab" aria-selected={t === tab} className={t === tab ? 'on' : ''} onClick={() => setTab(t)}>{t}</button>)}</div>
