@@ -129,3 +129,6 @@ export function goTo(url: string) {
 export function appBack() {
   if ((history.state as any)?.bp) history.back(); else goTo('/events');
 }
+
+/** Publicar no Txillapp: abre o compositor de lá com o texto e a ligação já escritos (nada é publicado sozinho). */
+export const txillappPost = (texto: string, link: string) => `https://txillapp.com/new/post?texto=${encodeURIComponent(texto.slice(0, 1500))}&link=${encodeURIComponent(link)}`;

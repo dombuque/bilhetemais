@@ -1,6 +1,6 @@
 import { locale } from '../i18n';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, dt, eventShareUrl, eventUrl, mt, shrinkImage, toMinor, upload } from '../api';
+import { api, dt, eventShareUrl, eventUrl, mt, shrinkImage, toMinor, txillappPost, upload } from '../api';
 import { inApp } from '../i18n';
 import { BarRow, ConfirmButton, Empty, Field, Icon, Layout, Modal, MoneyInput, PageHead, Pill, Skeleton, useAction, useToast } from '../ui';
 import { BrandEditor } from './Brand';
@@ -333,7 +333,7 @@ function Summary({ ov, rep, url, alerts }: { ov: any; rep: any; url: string; ale
           <p className="muted small" style={{ marginTop: 8 }}>Carregamentos e saldos não são receita do organizador: são fundos dos participantes.</p></div>
       </div>
       <div className="card stack-sm"><div className="between"><div><h3>Divulgação</h3><p className="muted small">{url}</p></div>
-        <span className="inline"><button className="ghost sm" onClick={() => navigator.clipboard?.writeText(url)}><Icon n="copy" />Copiar ligação</button><button className="ghost sm" onClick={() => setPoster(!poster)}><Icon n="qr" />Cartaz com QR</button></span></div>
+        <span className="inline"><button className="ghost sm" onClick={() => navigator.clipboard?.writeText(url)}><Icon n="copy" />Copiar ligação</button><a className="btn ghost sm" href={txillappPost(`${ov.event.name} · ${dt(ov.event.starts_at)}${ov.event.location ? ' · ' + ov.event.location : ''}. Bilhetes no Bilhete+:`, url)} target="_blank" rel="noopener noreferrer">Postar no Txillapp</a><button className="ghost sm" onClick={() => setPoster(!poster)}><Icon n="qr" />Cartaz com QR</button></span></div>
         {poster && <><PosterQr url={url} name={ov.event.name} /><button className="ghost" onClick={() => window.print()}><Icon n="print" />Imprimir cartaz</button></>}</div>
     </div>
   );

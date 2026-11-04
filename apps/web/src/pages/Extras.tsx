@@ -1,6 +1,6 @@
 import { locale } from '../i18n';
 import { useEffect, useMemo, useState } from 'react';
-import { dt, eventShareUrl } from '../api';
+import { dt, eventShareUrl, txillappPost } from '../api';
 import { Icon, Modal, Qr } from '../ui';
 import { googleDirections, wazeDirections } from '../map/links';
 
@@ -109,6 +109,7 @@ export function ShareMenu({ title, text, onClose }: { title: string; text: strin
   const u = encodeURIComponent(url), msg = encodeURIComponent(`${title} — ${text}`.trim()), ttl = encodeURIComponent(title);
   const options: { name: string; href: string; color: string; mark: string }[] = [
     { name: 'WhatsApp', href: `https://wa.me/?text=${msg}%20${u}`, color: '#25D366', mark: 'W' },
+    { name: 'Txillapp', href: txillappPost(`${title} — ${text}`.trim(), url), color: '#ff4f8b', mark: 'Tx' }, // abre o compositor do Txillapp já preenchido; a pessoa revê e publica
     { name: 'E-mail', href: `mailto:?subject=${ttl}&body=${msg}%0A${u}`, color: '#5b2eff', mark: '@' },
     { name: 'Facebook', href: `https://www.facebook.com/sharer/sharer.php?u=${u}`, color: '#1877F2', mark: 'f' },
     { name: 'X', href: `https://twitter.com/intent/tweet?text=${msg}&url=${u}`, color: '#0b0820', mark: 'X' },
