@@ -7,3 +7,12 @@ dist/
 *.log
 .DS_Store
 apps/api/coverage/
+
+# Android (TWA): ficheiros gerados e chaves nunca vão para o repositório
+apps/android/app/build/
+apps/android/build/
+apps/android/.gradle/
+apps/android/*.keystore
+apps/android/*.apk
+apps/android/*.aab
+apps/android/local.properties

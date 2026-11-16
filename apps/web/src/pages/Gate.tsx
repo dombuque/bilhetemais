@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, dt } from '../api';
-import { loadManifest, loadQueue, newClientId, saveManifest, saveQueue, validateLocal, type Direction, type QueuedScan } from '../gateOffline';
+import { dequeueScans, enqueueScan, loadManifest, loadQueue, newClientId, requestPersistentStorage, saveManifest, validateLocal, type Direction, type QueuedScan } from '../gateOffline';
+import { useWakeLock } from '../wakeLock';
 import { Empty, FullResult, Icon, Layout, PageHead, ScanInput, Skeleton, useToast } from '../ui';
 
 const TEXT: Record<string, string> = { VALID: 'ENTRADA VÁLIDA', EXIT_OK: 'SAÍDA REGISTADA', ALREADY_INSIDE: 'JÁ ESTÁ DENTRO', NOT_INSIDE: 'NÃO ENTROU', ALREADY_USED: 'JÁ UTILIZADO', EXPIRED: 'EXPIRADO', REVOKED: 'BILHETE CANCELADO', BLOCKED: 'BILHETE BLOQUEADO', UNAUTHORIZED: 'NÃO AUTORIZADO', ERROR: 'ERRO DE LEITURA' };
@@ -18,7 +19,10 @@ export function Gate({ me }: { me: any }) {
   const [queue, setQueue] = useState<QueuedScan[]>([]);
   const [manifestInfo, setManifestInfo] = useState<{ count: number; at: string } | null>(null);
   const showing = useRef(false); // com resultado no ecrã, novas leituras são ignoradas
+  const syncing = useRef(false);
   const toast = useToast();
+  useWakeLock(); // o ecrã não apaga durante a leitura
+  useEffect(() => { requestPersistentStorage(); }, []); // pede que a lista offline não seja apagada pelo navegador
 
   useEffect(() => { api('GET', '/events').then((e) => { setEvents(e); if (e[0]) setEid(e[0].id); }); }, []);
   useEffect(() => {
@@ -27,9 +31,10 @@ export function Gate({ me }: { me: any }) {
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
   }, []);
 
-  const refreshLocal = useCallback((id: string) => {
-    setQueue(loadQueue(id));
-    const m = loadManifest(id);
+  const refreshLocal = useCallback(async (id: string) => {
+    if (!id) return;
+    setQueue(await loadQueue(id));
+    const m = await loadManifest(id);
     setManifestInfo(m ? { count: m.tickets.length, at: m.generatedAt } : null);
   }, []);
   const load = useCallback(async () => {
@@ -42,21 +47,26 @@ export function Gate({ me }: { me: any }) {
   const prepareOffline = async () => {
     try {
       const m = await api('GET', `/events/${eid}/gate-manifest`);
-      if (!saveManifest(eid, m)) throw new Error('Sem espaço no dispositivo para guardar a lista.');
-      refreshLocal(eid); toast.show(`Modo offline preparado: ${m.tickets.length} bilhetes`);
+      if (!(await saveManifest(eid, m))) throw new Error('Sem espaço no dispositivo para guardar a lista.');
+      await refreshLocal(eid); toast.show(`Modo offline preparado: ${m.tickets.length} bilhetes`);
     } catch (e: any) { toast.show(e.message ?? 'Não foi possível preparar o modo offline', true); }
   };
 
   /** Envia as leituras guardadas; o servidor ignora repetições e sinaliza conflitos entre portas. */
   const sync = useCallback(async () => {
-    const q = loadQueue(eid);
+    if (syncing.current || !eid) return;
+    const q = await loadQueue(eid);
     if (!q.length || !navigator.onLine || (window as any).__forceOffline === true) return;
+    syncing.current = true;
     try {
       const r = await api('POST', `/events/${eid}/scan-batch`, { scans: q });
-      saveQueue(eid, []); refreshLocal(eid); load();
+      await dequeueScans(eid, new Set(q.map((x) => x.clientId))); // só sai da fila o que foi enviado; leituras feitas entretanto ficam
+      await refreshLocal(eid); load();
       toast.show(r.conflicts ? `${q.length} leituras sincronizadas, ${r.conflicts} em conflito (bilhete já usado noutra porta)` : `${q.length} leituras sincronizadas`, r.conflicts > 0);
-      const m = await api('GET', `/events/${eid}/gate-manifest`); saveManifest(eid, m); refreshLocal(eid); // refresca a lista com o que as outras portas fizeram
-    } catch { /* tenta de novo mais tarde */ }
+      if ((await loadQueue(eid)).length === 0) { // com leituras novas por enviar, não se troca a lista local (perderia as marcas dessas leituras)
+        const m = await api('GET', `/events/${eid}/gate-manifest`); await saveManifest(eid, m); await refreshLocal(eid); // refresca a lista com o que as outras portas fizeram
+      }
+    } catch { /* tenta de novo mais tarde */ } finally { syncing.current = false; }
   }, [eid, load, refreshLocal, toast]);
   useEffect(() => { if (online) sync(); }, [online, sync]);
   useEffect(() => { const t = setInterval(sync, 20000); return () => clearInterval(t); }, [sync]);
@@ -66,12 +76,12 @@ export function Gate({ me }: { me: any }) {
     showing.current = true;
     const forceOffline = (window as any).__forceOffline === true; // para testes locais
     const offlineScan = async () => {
-      const m = loadManifest(eid);
+      const m = await loadManifest(eid);
       if (!m) { setResult({ kind: 'ERROR', offline: true }); return; }
       const v = await validateLocal(m, token, dir);
-      saveManifest(eid, v.manifest);
-      saveQueue(eid, [...loadQueue(eid), { clientId: newClientId(), token, at: new Date().toISOString(), gateId: gate || undefined, localResult: v.result, direction: dir }]);
-      refreshLocal(eid);
+      await saveManifest(eid, v.manifest);
+      await enqueueScan(eid, { clientId: newClientId(), token, at: new Date().toISOString(), gateId: gate || undefined, localResult: v.result, direction: dir });
+      await refreshLocal(eid);
       setResult({ kind: v.result, offline: true });
     };
     try {
@@ -79,7 +89,7 @@ export function Gate({ me }: { me: any }) {
       else { const r = await api('POST', `/events/${eid}/scan`, { token, gateId: gate || undefined, direction: dir }); setResult({ kind: r.result, offline: false, ticket: r.ticket }); }
     } catch (e: any) {
       // falha de rede (sem resposta do servidor): se houver lista local, valida offline
-      if (e?.status === undefined && loadManifest(eid)) await offlineScan(); else setResult({ kind: 'ERROR', offline: false });
+      if (e?.status === undefined && await loadManifest(eid)) await offlineScan(); else setResult({ kind: 'ERROR', offline: false });
     }
     load();
   }, [eid, gate, dir, load, refreshLocal]);

@@ -128,8 +128,14 @@ export function createApp(db: Db, cfg: AppConfig) {
   // quem abre o endereço no navegador (Accept: text/html) recebe a página; a aplicação pede o JSON com fetch
   // a app instalada também abre os endereços curtos dos eventos (<evento>.<domínio>) em vez de os mandar para o navegador (scope_extensions)
   app.get('/.well-known/web-app-origin-association', (_req, res) => { res.type('application/json').set('Cache-Control', 'public, max-age=3600').json({ [(cfg.publicUrl ?? '') + '/']: { scope: '/' } }); });
+  // liga o site à app Android (TWA): sem isto a app abriria com a barra do Chrome. O SHA-256 é o da chave de assinatura (público por natureza);
+  // ANDROID_CERT_SHA256 (separado por vírgulas) acrescenta outros, por ex. o da assinatura da Google Play.
+  const androidCerts = ['93:8C:2A:41:55:9A:8D:8E:74:BF:20:BB:C2:45:C8:96:B1:B0:83:97:FC:04:3A:48:F4:F6:19:BF:B2:30:55:61', ...(process.env.ANDROID_CERT_SHA256 ?? '').split(',').map((s) => s.trim()).filter(Boolean)];
+  app.get('/.well-known/assetlinks.json', (_req, res) => {
+    res.type('application/json').set('Cache-Control', 'public, max-age=3600').json([{ relation: ['delegate_permission/common.handle_all_urls'], target: { namespace: 'android_app', package_name: 'live.bilhetemais.app', sha256_cert_fingerprints: androidCerts } }]);
+  });
   if (cfg.webDir && existsSync(join(cfg.webDir, 'index.html'))) {
-    app.get('/events', (req, res, next) => (/text\/html/.test(req.headers.accept ?? '') ? (res.setHeader('Cache-Control', 'no-cache'), res.sendFile(join(cfg.webDir!, 'index.html'))) : next()));
+    app.get('/events',(req, res, next) => (/text\/html/.test(req.headers.accept ?? '') ? (res.setHeader('Cache-Control', 'no-cache'), res.sendFile(join(cfg.webDir!, 'index.html'))) : next()));
   }
   app.use('/public', (req, res, next) => (req.method === 'POST' ? limit(cfg.publicRateLimit)(req, res, next) : next()));
   const h = (fn: (req: Req, res: Response) => Promise<unknown>) => (req: Request<any>, res: Response, next: NextFunction) =>

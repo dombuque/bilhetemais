@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, dt, mt, newKey } from '../api';
+import { useWakeLock } from '../wakeLock';
 import { ConfirmButton, Empty, FullResult, Icon, Layout, Modal, PageHead, ScanInput, Skeleton, useAction, useToast } from '../ui';
 
 const NAV = [{ id: 'sell', label: 'Vender', icon: 'cart' }, { id: 'sales', label: 'Vendas', icon: 'chart' }];
